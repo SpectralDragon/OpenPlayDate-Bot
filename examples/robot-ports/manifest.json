@@ -1,0 +1,12 @@
+{
+  "api": 1,
+  "id": "robot-ports",
+  "name": "Порты робота",
+  "kind": "robot",
+  "entry": "main.lua",
+  "fps": 20,
+  "permissions": {
+    "gpio": [16],
+    "uart": {"port": 1, "tx": 17, "rx": 18, "baud": 9600}
+  }
+}

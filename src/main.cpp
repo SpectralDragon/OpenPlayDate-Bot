@@ -6,6 +6,9 @@
 #include "display_test.h"
 #include "console_shell.h"
 
+// Lua parsing and nested module loads share the Arduino loop task's stack.
+SET_LOOP_TASK_STACK_SIZE(32 * 1024);
+
 TFT_eSPI display;
 Controls controls;
 Eyes eyes(display);
@@ -84,6 +87,7 @@ void loop() {
       Serial.println("DISPLAY TEST: colour bars sent; visual confirmation required");
     } else if (command == 'e') {
       displayTest = false;
+      shell.command('m');
       display.fillScreen(TFT_BLACK);
       shell.command('z');
       shell.invalidate();

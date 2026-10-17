@@ -30,6 +30,8 @@
 // Conservative speed for the first build on breadboard/jumper wires.
 #ifdef ROBOT_DISPLAY_SLOW_SPI
 #define SPI_FREQUENCY 1000000
+#elif defined(ROBOT_DISPLAY_SPI_HZ)
+#define SPI_FREQUENCY ROBOT_DISPLAY_SPI_HZ
 #else
 #define SPI_FREQUENCY 10000000
 #endif

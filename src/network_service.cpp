@@ -1,7 +1,10 @@
 #include "network_service.h"
 #include "rom_store.h"
+#include "opd_bundle.h"
 #include <WiFi.h>
 #include <LittleFS.h>
+#include <esp_wifi.h>
+#include <ArduinoJson.h>
 
 namespace {
 String html(String value) {
@@ -26,16 +29,39 @@ void NetworkService::begin() {
 
 void NetworkService::connect() {
   WiFi.mode(portal_ ? WIFI_AP_STA : WIFI_STA);
+  // Stay responsive to LAN discovery/uploads between Lua frames.
+  WiFi.setSleep(false);
+  // The USB breadboard powers the LCD too. Use the same moderate power as
+  // the portal when associating; full Wi-Fi TX power caused supply resets.
+  // WiFi.mode() starts the driver synchronously, but Arduino's STA_STARTED
+  // event bit may still be pending. Its setTxPower() wrapper can therefore
+  // silently reject this early call. Apply the limit to the driver directly.
+  const esp_err_t power = esp_wifi_set_max_tx_power(WIFI_POWER_8_5dBm);
+  if (power != ESP_OK) Serial.printf("NETWORK: TX power limit failed: %d\n", power);
   WiFi.begin(settings_.ssid.c_str(), settings_.password.c_str());
   connecting_ = true;
   connectAt_ = millis();
+}
+
+void NetworkService::pauseForGame() {
+  stopPortal(); stopServices(); connecting_ = false; pausedForGame_ = true;
+  // Keep NVS settings and the initialized network interfaces. Deinitializing
+  // and immediately reinitializing Wi-Fi can race Arduino's event callbacks.
+  radioStopped_ = WiFi.getMode() != WIFI_OFF && esp_wifi_stop() == ESP_OK;
+}
+
+void NetworkService::resumeAfterGame() {
+  if (!pausedForGame_) return;
+  pausedForGame_ = false;
+  if (radioStopped_) { esp_wifi_start(); radioStopped_ = false; }
+  if (settings_.wifiEnabled && !settings_.ssid.isEmpty()) connect();
 }
 
 void NetworkService::setEnabled(bool enabled) {
   settings_.wifiEnabled = enabled;
   settings_.save();
   connecting_ = false;
-  if (!enabled) { stopPortal(); WiFi.disconnect(false, true); WiFi.mode(WIFI_OFF); }
+  if (!enabled) { stopPortal(); stopServices(); WiFi.disconnect(false, true); WiFi.mode(WIFI_OFF); }
   else if (!settings_.ssid.isEmpty()) connect();
 }
 
@@ -44,6 +70,7 @@ void NetworkService::forget() {
   connecting_ = false;
   WiFi.disconnect(false, true);
   WiFi.mode(portal_ ? WIFI_AP_STA : WIFI_OFF);
+  if (!portal_) stopServices();
 }
 
 void NetworkService::startPortal() {
@@ -52,24 +79,66 @@ void NetworkService::startPortal() {
   settings_.wifiEnabled = true;
   settings_.save();
   if (!WiFi.mode(WIFI_AP_STA)) return;
+  WiFi.setSleep(false);
+  esp_wifi_set_max_tx_power(WIFI_POWER_8_5dBm);
   Serial.printf("PORTAL: radio ready heap=%u\n", ESP.getFreeHeap());
   if (!WiFi.softAP(apName_.c_str(), apPassword_.c_str())) return;
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   portal_ = true;
   dns_.start(53, "*", WiFi.softAPIP());
-  server_.begin();
+  services();
 }
 
 void NetworkService::stopPortal() {
   if (!portal_) return;
-  if (upload_) upload_.close();
-  dns_.stop(); server_.stop();
+  dns_.stop();
   WiFi.softAPdisconnect(true);
   portal_ = false;
   WiFi.mode(settings_.wifiEnabled && !settings_.ssid.isEmpty() ? WIFI_STA : WIFI_OFF);
+  if (WiFi.status() != WL_CONNECTED) stopServices();
+}
+
+void NetworkService::services() {
+  if (!serverActive_) { server_.begin(); serverActive_ = true; }
+  if (!discoveryActive_) discoveryActive_ = discovery_.begin(42420) == 1;
+}
+
+void NetworkService::stopServices() {
+  if (upload_) upload_.close();
+  if (serverActive_) server_.stop();
+  if (discoveryActive_) discovery_.stop();
+  serverActive_ = discoveryActive_ = false;
+  uploadComplete_ = false;
+  if (roms::available()) LittleFS.remove("/upload.tmp");
+}
+
+String NetworkService::studioInfo(bool session) const {
+  DynamicJsonDocument doc(768);
+  char id[20]; snprintf(id, sizeof(id), "%012llx", ESP.getEfuseMac());
+  doc["product"] = "OpenPlay"; doc["protocol"] = 1;
+  doc["id"] = id; doc["name"] = apName_; doc["port"] = 80;
+  doc["api"] = 1; doc["maxBundle"] = opd::maxBundleSize;
+  doc["storage"] = roms::available();
+  if (session) doc["token"] = token_;
+  String json; serializeJson(doc, json); return json;
+}
+
+void NetworkService::discover() {
+  // One bounded datagram per loop; discovery never broadcasts credentials.
+  const int size = discovery_.parsePacket();
+  if (!size) return;
+  char request[32]; int count = discovery_.read(request, sizeof(request));
+  discovery_.flush();
+  constexpr char query[] = "OPENPLAY_DISCOVER_V1";
+  if (count != sizeof(query)-1 || size != count || memcmp(request, query, count)) return;
+  ++discoveryRequests_;
+  const String json = studioInfo();
+  discovery_.beginPacket(discovery_.remoteIP(), discovery_.remotePort());
+  discovery_.write(reinterpret_cast<const uint8_t*>(json.c_str()), json.length());
+  discovery_.endPacket();
 }
 
 String NetworkService::status() const {
+  if (pausedForGame_) return "Пауза на время игры";
   if (!settings_.wifiEnabled) return "Wi-Fi выключен";
   if (WiFi.status() == WL_CONNECTED) return WiFi.localIP().toString();
   if (connecting_) return "Подключаемся...";
@@ -77,7 +146,13 @@ String NetworkService::status() const {
   return "Нет подключения";
 }
 
+void NetworkService::printStatus() const {
+  Serial.printf("LAN: http=%d discovery=%d rssi=%d queries=%u sessions=%u\n",
+                serverActive_, discoveryActive_, WiFi.RSSI(), discoveryRequests_, studioRequests_);
+}
+
 void NetworkService::update(uint32_t now) {
+  if (pausedForGame_) return;
   if (connecting_ && WiFi.status() == WL_CONNECTED) {
     connecting_ = false;
     configTime(0, 0, "pool.ntp.org", "time.google.com");
@@ -86,7 +161,12 @@ void NetworkService::update(uint32_t now) {
     connecting_ = false;
     WiFi.disconnect(false);
   }
-  if (portal_) { dns_.processNextRequest(); server_.handleClient(); }
+  if (portal_ || (settings_.wifiEnabled && WiFi.status() == WL_CONNECTED)) {
+    services();
+    if (portal_) dns_.processNextRequest();
+    if (discoveryActive_) discover();
+    server_.handleClient();
+  } else if (serverActive_) stopServices();
 }
 
 bool NetworkService::authorized() {
@@ -104,14 +184,52 @@ void NetworkService::page() {
     for (const String& name : roms::list()) page += "<li>" + html(name) + "</li>";
     page += "</ul><p>Свободно: " + String((LittleFS.totalBytes() - LittleFS.usedBytes()) / 1024) + " КБ</p>";
   } else page += "<p>Хранилище недоступно. Файлы не стирались.</p>";
+  page += "</section><section><h2>Lua-программы</h2><p>Свои игры и программы для робота: .opd, до 2 МБ.</p>";
+  if (roms::available()) {
+    page += "<form action='/opd?token=" + token_ + "' method='post' enctype='multipart/form-data'><label>Файл программы<input type='file' name='opd' accept='.opd' required></label><button>Загрузить программу</button></form><small>После загрузки откройте Lua-программы на консоли.</small><ul>";
+    for (const String& name : opd::list()) page += "<li>" + html(name) + "</li>";
+    page += "</ul>";
+  } else page += "<p>Хранилище недоступно.</p>";
   page += "</section><p><small>Закрытие настройки на консоли отключит эту точку доступа.</small></p></html>";
   server_.sendHeader("Cache-Control", "no-store");
   server_.send(200, "text/html; charset=utf-8", page);
 }
 
 void NetworkService::routes() {
-  server_.on("/", HTTP_GET, [this] { page(); });
+  const char* headers[] = {"X-OpenPlay-Studio", "Origin"}; server_.collectHeaders(headers, 2);
+  server_.on("/api/info", HTTP_GET, [this] {
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(200, "application/json", studioInfo());
+  });
+  server_.on("/api/studio", HTTP_GET, [this] {
+    // A custom header keeps a browser on another origin from obtaining the token.
+    if (server_.header("X-OpenPlay-Studio") != "1" || !server_.header("Origin").isEmpty()) {
+      server_.send(403, "application/json", "{\"ok\":false,\"error\":\"Studio header required\"}"); return;
+    }
+    ++studioRequests_;
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(200, "application/json", studioInfo(true));
+  });
+  server_.on("/api/apps", HTTP_POST, [this] {
+    if (!authorized()) return;
+    bool completed = uploadComplete_ && uploadBundle_ && studioUpload_; uploadComplete_ = false;
+    if (!completed && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
+    if (!uploadError_.isEmpty()) {
+      DynamicJsonDocument doc(512); doc["ok"] = false; doc["error"] = uploadError_;
+      String json; serializeJson(doc,json); server_.send(400,"application/json",json); return;
+    }
+    const String error = launchStudio_ ? launchStudio_(uploadName_) : String("Запуск из Studio недоступен");
+    DynamicJsonDocument doc(768); doc["ok"] = error.isEmpty(); doc["file"] = uploadName_;
+    doc["bytes"] = uploadBytes_; doc["running"] = error.isEmpty();
+    if (!error.isEmpty()) doc["error"] = error;
+    String json; serializeJson(doc,json); server_.send(error.isEmpty() ? 200 : 422,"application/json",json);
+  }, [this] { uploadChunk(true, true); });
+  server_.on("/", HTTP_GET, [this] {
+    if (portal_) page();
+    else server_.send(200,"text/html; charset=utf-8","<meta charset='utf-8'><h1>OpenPlay</h1><p>Консоль доступна в OpenPlay Studio. Настройка Wi-Fi открывается из меню консоли.</p>");
+  });
   server_.on("/wifi", HTTP_POST, [this] {
+    if (!portal_) { server_.send(403); return; }
     if (!authorized()) return;
     String ssid = server_.arg("ssid"), password = server_.arg("password");
     if (ssid.isEmpty() || ssid.length() > 32 || password.length() > 63 ||
@@ -123,46 +241,69 @@ void NetworkService::routes() {
     server_.send(200, "text/html; charset=utf-8", "<meta charset='utf-8'><p>Подключаемся. Результат появится на экране консоли.</p><a href='/'>Назад</a>");
   });
   server_.on("/rom", HTTP_POST, [this] {
+    if (!portal_) { server_.send(403); return; }
     if (!authorized()) return;
-    if (!uploadComplete_ && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
+    bool completed = uploadComplete_ && !uploadBundle_;
+    uploadComplete_ = false;
+    if (!completed && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
     if (!uploadError_.isEmpty()) {
       server_.send(400, "text/plain; charset=utf-8", uploadError_); return;
     }
     server_.send(200, "text/html; charset=utf-8", "<meta charset='utf-8'><p>Игра загружена! Вернитесь в Game Boy на консоли.</p><a href='/'>Назад</a>");
   }, [this] { uploadChunk(); });
+  server_.on("/opd", HTTP_POST, [this] {
+    if (!portal_) { server_.send(403); return; }
+    if (!authorized()) return;
+    bool completed = uploadComplete_ && uploadBundle_;
+    uploadComplete_ = false;
+    if (!completed && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
+    if (!uploadError_.isEmpty()) { server_.send(400, "text/plain; charset=utf-8", uploadError_); return; }
+    server_.send(200, "text/html; charset=utf-8", "<meta charset='utf-8'><p>Программа загружена! Откройте Lua-программы на консоли.</p><a href='/'>Назад</a>");
+  }, [this] { uploadChunk(true); });
   server_.onNotFound([this] {
     if (server_.method() == HTTP_GET) { server_.sendHeader("Location", "http://192.168.4.1/"); server_.send(302); }
     else server_.send(404);
   });
 }
 
-void NetworkService::uploadChunk() {
+void NetworkService::uploadChunk(bool bundle, bool studio) {
   HTTPUpload& event = server_.upload();
   if (event.status == UPLOAD_FILE_START) {
     if (upload_) upload_.close();
     uploadError_ = ""; uploadBytes_ = 0; uploadComplete_ = false;
-    uploadName_ = roms::safeName(event.filename);
-    if (server_.arg("token") != token_) uploadError_ = "Нет доступа";
+    uploadBundle_ = bundle; studioUpload_ = studio;
+    uploadName_ = bundle ? opd::safeName(event.filename) : roms::safeName(event.filename);
+    if ((!studio && !portal_) || server_.arg("token") != token_ ||
+        (studio && (server_.header("X-OpenPlay-Studio") != "1" || !server_.header("Origin").isEmpty()))) uploadError_ = "Нет доступа";
     else if (!roms::available()) uploadError_ = "Хранилище недоступно";
-    else if (uploadName_.isEmpty()) uploadError_ = "Нужен .gb с именем латиницей";
-    else if (roms::list().size() >= 32 && !LittleFS.exists("/roms/" + uploadName_))
-      uploadError_ = "В списке уже 32 игры";
+    else if (uploadName_.isEmpty()) uploadError_ = bundle ? "Нужен .opd с именем a-z, 0-9, - или _" : "Нужен .gb с именем латиницей";
+    else if ((bundle ? opd::list().size() : roms::list().size()) >= 32 &&
+             !LittleFS.exists((bundle ? "/apps/" : "/roms/") + uploadName_))
+      uploadError_ = "В списке уже 32 файла";
+    if (studio && uploadError_.isEmpty() && (!prepareStudio_ || !prepareStudio_()))
+      uploadError_ = "Закройте Game Boy на консоли перед загрузкой";
     if (uploadError_.isEmpty()) {
       upload_ = LittleFS.open("/upload.tmp", "w");
       if (!upload_) uploadError_ = "Не удалось создать файл";
     }
   } else if (event.status == UPLOAD_FILE_WRITE && uploadError_.isEmpty()) {
     uploadBytes_ += event.currentSize;
-    if (uploadBytes_ > roms::maxRomSize) uploadError_ = "Игра больше 2 МБ";
+    if (uploadBytes_ > (bundle ? opd::maxBundleSize : roms::maxRomSize)) uploadError_ = "Файл больше 2 МБ";
     else if (upload_.write(event.buf, event.currentSize) != event.currentSize)
       uploadError_ = "Не хватает места в хранилище";
   } else if (event.status == UPLOAD_FILE_END) {
     if (upload_) upload_.close();
     if (uploadError_.isEmpty()) {
-      File file = LittleFS.open("/upload.tmp", "r");
-      uploadError_ = roms::validate(file); file.close();
-      if (uploadError_.isEmpty() && !LittleFS.rename("/upload.tmp", ("/roms/" + uploadName_).c_str()))
-        uploadError_ = "Не удалось сохранить игру";
+      if (bundle) {
+        opd::Bundle candidate;
+        if (!candidate.open("/upload.tmp")) uploadError_ = candidate.error();
+        candidate.close();
+      } else {
+        File file = LittleFS.open("/upload.tmp", "r");
+        uploadError_ = roms::validate(file); file.close();
+      }
+      if (uploadError_.isEmpty() && !LittleFS.rename("/upload.tmp", ((bundle ? "/apps/" : "/roms/") + uploadName_).c_str()))
+        uploadError_ = "Не удалось сохранить файл";
       uploadComplete_ = uploadError_.isEmpty();
     }
     if (!uploadError_.isEmpty() && roms::available()) LittleFS.remove("/upload.tmp");

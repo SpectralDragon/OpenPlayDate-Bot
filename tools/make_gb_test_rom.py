@@ -4,13 +4,15 @@ The background scrolls four shades. Cartridge RAM counts boots, reversing
 the palette every other boot so battery save/load can be checked visually.
 """
 from pathlib import Path
-import sys
+import argparse
 
 
-def make_rom():
+def make_rom(scene='scroll'):
+    if scene not in ('scroll', 'tile'):
+        raise ValueError('scene must be scroll or tile')
     rom = bytearray(32768)
     rom[0x100:0x104] = bytes([0x00, 0xC3, 0x50, 0x01])
-    rom[0x134:0x140] = b'OPENPLAYTEST'
+    rom[0x134:0x140] = b'OPENPLAYTEST' if scene == 'scroll' else b'OPENPLAYTILE'
     rom[0x147] = 3  # MBC1 + RAM + battery
     rom[0x149] = 2  # 8 KiB RAM
     code = bytes([
@@ -26,11 +28,26 @@ def make_rom():
         0x3E, 0xAA, 0x22,
         0x3E, 0xCC, 0x22,
         0x05, 0x20, 0xF7,
+    ])
+    if scene == 'tile':
+        code += bytes([
+            0x21, 0x10, 0x80, 0x06, 16, 0xAF,  # Blank tile 1
+            0x22, 0x05, 0x20, 0xFC,
+            0x21, 0, 0x98, 0x01, 0, 4,        # Map: 1024 blank tiles
+            0x3E, 1, 0x22, 0x0B, 0x78, 0xB1, 0x20, 0xF8,
+            0xAF, 0xEA, 0x8A, 0x98,           # One patterned tile at (80,32)
+        ])
+    code += bytes([
         0x3E, 0x91, 0xE0, 0x40,       # LCD on
         0xF0, 0x44, 0xFE, 144, 0x20, 0xFA,  # Wait for VBlank
-        0xF0, 0x43, 0x3C, 0xE0, 0x43,       # Scroll
+        0xF0, 0x43, 0x3C,             # Scroll
+    ])
+    if scene == 'tile':
+        code += bytes([0xE6, 0x3F])   # Keep the small moving patch in view
+    code += bytes([
+        0xE0, 0x43,
         0xF0, 0x44, 0xFE, 144, 0x28, 0xFA,  # Leave VBlank
-        0x18, 0xED,
+        0x18, 0xED if scene == 'scroll' else 0xEB,
     ])
     rom[0x150:0x150+len(code)] = code
     checksum = 0
@@ -43,7 +60,11 @@ def make_rom():
 
 
 if __name__ == '__main__':
-    destination = Path(sys.argv[1] if len(sys.argv) > 1 else '.pio/inspection/openplay-test.gb')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('destination', type=Path, nargs='?', default=Path('.pio/inspection/openplay-test.gb'))
+    parser.add_argument('--scene', choices=('scroll', 'tile'), default='scroll')
+    args = parser.parse_args()
+    destination = args.destination
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(make_rom())
+    destination.write_bytes(make_rom(args.scene))
     print(f'Created test cartridge: {destination} ({destination.stat().st_size} bytes)')

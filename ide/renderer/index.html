@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self'">
+  <title>OpenPlay Studio</title>
+  <link rel="stylesheet" href="studio.css">
+</head>
+<body>
+<svg class="symbols" aria-hidden="true"><defs>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v11H3Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6M9 16h4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 3h13l4 4v14H4ZM8 3v6h8V3M8 21v-8h9v8"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v11l-9 4-9-4ZM3 7l9 4 9-4M12 11v11M7 5l9 4"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5v16M3 3c4 0 7 0 9 2 2-2 5-2 9-2v15c-4 0-7 0-9 3-2-3-5-3-9-3Z"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4M10 10h4v4h-4Z"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 7h5l2-3h4l2 3h5v13H3Z"/><circle cx="12" cy="13" r="4"/></symbol>
+  <symbol id="i-step" viewBox="0 0 24 24"><path d="m5 5 10 7-10 7ZM19 5v14"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+</defs></svg>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">o<span>p</span></span><span>OpenPlay <b>Studio</b><small>ТВОЯ МАЛЕНЬКАЯ ИГРОВАЯ МАСТЕРСКАЯ</small></span></div>
+  <div class="project-crumb"><svg><use href="#i-folder"/></svg><span id="project-name">Загрузка проекта…</span><span class="crumb-divider">/</span><span id="crumb-file">main.lua</span></div>
+  <button id="api" class="quiet"><svg><use href="#i-book"/></svg>Справочник API <kbd>F1</kbd></button>
+</header>
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="section-label">ПРОЕКТ <span class="sidebar-actions"><button id="new-file" class="icon-button" title="Новый файл" aria-label="Новый файл"><svg><use href="#i-plus"/></svg></button><button id="open" class="icon-button" title="Открыть проект · Ctrl+O" aria-label="Открыть проект"><svg><use href="#i-folder"/></svg></button></span></div>
+    <div class="project-root"><span class="root-dot"></span><span id="root-name">bouncing-ball</span><span class="version-tag">API 1</span></div>
+    <nav id="files" aria-label="Файлы проекта"></nav>
+    <button id="new-project" class="new-project"><svg><use href="#i-plus"/></svg>Новый проект</button>
+    <div class="sidebar-bottom">
+      <div class="starter-card"><span class="eyebrow">ЕСТЬ ИДЕЯ?</span><h3>Давай оживим её.</h3><p>Начни с шарика или напиши программу для робота.</p><button id="new-robot"><svg><use href="#i-chip"/></svg>Проект для робота <span>↗</span></button></div>
+      <div class="board-note"><span class="online-dot"></span>OpenPlay OS <span>Lua 5.4.9</span></div>
+    </div>
+  </aside>
+  <main class="editor-pane">
+    <div class="editor-toolbar"><div class="editor-title"><svg><use href="#i-code"/></svg>Код <span id="dirty-label">Всё сохранено</span></div><div class="toolbar-actions"><button id="save" class="quiet" title="Сохранить все файлы · Ctrl+S"><svg><use href="#i-save"/></svg>Сохранить</button><button id="export" class="quiet" title="Собрать .opd · Ctrl+Shift+B"><svg><use href="#i-box"/></svg>Собрать .opd</button><button id="run" class="primary" title="Сохранить и запустить · F5"><svg><use href="#i-play"/></svg>Запустить <kbd>F5</kbd></button></div></div>
+    <div id="tabs" class="tabs" role="tablist" aria-label="Открытые файлы"></div>
+    <div id="editor"><div class="loading">Открываем мастерскую…</div></div>
+    <div class="console">
+      <div class="console-head"><span>КОНСОЛЬ <span id="log-count" class="count">0</span></span><div><span class="console-hint">Сообщения твоей программы</span><button id="clear-log" class="text-button">Очистить</button></div></div>
+      <div id="logs" role="log" aria-label="Журнал программы"></div>
+    </div>
+  </main>
+  <aside class="simulator-pane">
+    <div class="sim-header"><span>Симулятор <span class="native-badge">NATIVE</span></span><div class="sim-header-actions"><button id="device-quick-send" class="quiet" title="Собрать и отправить на консоль · F6"><svg><use href="#i-box"/></svg>На консоль</button><button id="screenshot" class="icon-button" title="Сохранить снимок экрана" aria-label="Сохранить снимок экрана"><svg><use href="#i-camera"/></svg></button></div></div>
+    <div class="sim-toolbar"><div class="sim-state"><span id="state-dot"></span><span id="state-label">Подготовка</span></div><div><button id="pause" class="icon-button" title="Пауза / продолжить" aria-label="Пауза"><svg><use href="#i-pause"/></svg></button><button id="step" class="icon-button" title="Один кадр на паузе" aria-label="Один кадр"><svg><use href="#i-step"/></svg></button><button id="restart" class="icon-button" title="Перезапустить · F5" aria-label="Перезапустить"><svg><use href="#i-restart"/></svg></button><button id="stop" class="icon-button" title="Остановить · Shift+F5" aria-label="Остановить"><svg><use href="#i-stop"/></svg></button></div></div>
+    <div class="device-area">
+      <div class="device">
+        <div class="device-top"><span>OPENPLAY</span><span class="device-power"></span></div>
+        <div class="screen-bezel"><canvas id="screen" width="320" height="240" tabindex="0" aria-label="Экран консоли. Стрелки — движение, Z — A, X — B, Enter — джойстик"></canvas><div id="screen-overlay" hidden><span>Ⅱ</span>ПАУЗА</div></div>
+        <div class="device-controls"><div class="dpad" aria-label="Джойстик"><button data-key="up" class="pad-up" aria-label="Вверх"><svg><use href="#i-arrow"/></svg></button><button data-key="left" class="pad-left" aria-label="Влево"><svg><use href="#i-arrow"/></svg></button><button data-key="stick" class="pad-center" title="Нажатие джойстика" aria-label="Нажать джойстик"><span></span></button><button data-key="right" class="pad-right" aria-label="Вправо"><svg><use href="#i-arrow"/></svg></button><button data-key="down" class="pad-down" aria-label="Вниз"><svg><use href="#i-arrow"/></svg></button></div><div class="speaker"><i></i><i></i><i></i><i></i></div><div class="ab-buttons"><button data-key="b" aria-label="Кнопка B">B</button><button data-key="a" aria-label="Кнопка A">A</button></div></div>
+        <div class="device-bottom"><span>CREATE. PLAY. REPEAT.</span><span>01</span></div>
+      </div>
+      <div class="screen-spec"><span>320 × 240 <b>RGB565</b></span><span id="fps">— fps</span></div>
+    </div>
+    <div class="keyboard-help"><div><span>Управление</span><span class="focus-hint" id="focus-hint">Нажми на экран</span></div><div class="keys"><span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> Движение</span><span><kbd>Z</kbd> A</span><span><kbd>X</kbd> B</span><span><kbd>↵</kbd> ●</span></div></div>
+    <details id="hardware-panel" class="hardware-panel"><summary><svg><use href="#i-chip"/></svg>Виртуальные порты <span>GPIO / UART</span></summary><p>Нажми на вход, чтобы изменить его уровень. Выходами управляет код.</p><div id="pins" class="pins"></div><form id="uart-form"><label for="uart-input">UART1 RX <span id="uart-state">закрыт</span></label><div><input id="uart-input" maxlength="200" placeholder="Данные для программы"><button class="quiet" type="submit">Отправить</button></div></form></details>
+    <section class="device-connection" aria-label="Загрузка на настоящую консоль">
+      <div class="connection-heading"><span><svg><use href="#i-chip"/></svg>Настоящая консоль</span><button id="device-scan" class="icon-button" title="Найти консоли в локальной сети" aria-label="Найти консоли"><svg><use href="#i-restart"/></svg></button></div>
+      <select id="device-list" aria-label="Выбрать консоль"><option value="">Ищем в локальной сети…</option></select>
+      <p id="device-status" role="status">Консоль и компьютер должны быть в одной Wi-Fi сети.</p>
+      <button id="device-send" class="primary" disabled title="Сохранить, собрать и запустить на консоли · F6"><svg><use href="#i-box"/></svg>Собрать и отправить <kbd>F6</kbd></button>
+      <progress id="device-progress" max="100" value="0" hidden aria-label="Загрузка на консоль"></progress>
+      <details class="device-manual"><summary>Указать адрес вручную</summary><div><input id="device-address" placeholder="192.168.3.32" aria-label="IP-адрес консоли" spellcheck="false"><button id="device-connect" class="quiet">Подключить</button></div></details>
+      <button id="portal" class="text-button">Как подключить консоль к Wi-Fi</button>
+    </section>
+  </aside>
+</div>
+<footer class="statusbar"><div><span class="status-logo">op</span><span id="status">Запускаем OpenPlay Studio</span></div><div><span id="cursor">Стр 1, стлб 1</span><span id="language">Lua</span><span>UTF-8</span><span class="status-engine"><span class="online-dot"></span>Движок OpenPlay</span></div></footer>
+<dialog id="modal"><form method="dialog"><div class="modal-head"><h2 id="modal-title"></h2><button class="icon-button" value="cancel" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></div><p id="modal-message"></p><input id="modal-input" autocomplete="off" spellcheck="false" hidden><pre id="api-text" hidden></pre><div id="modal-actions"></div></form></dialog>
+<script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

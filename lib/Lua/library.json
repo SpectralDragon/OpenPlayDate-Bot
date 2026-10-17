@@ -1,0 +1,1 @@
+{"name":"OpenPlayLua","version":"5.4.9","build":{"flags":["-DLUAI_MAXCCALLS=40"]}}

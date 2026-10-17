@@ -27,6 +27,7 @@ bool roms::begin() {
   if (mounted) {
     LittleFS.mkdir("/roms");
     LittleFS.mkdir("/saves");
+    LittleFS.mkdir("/apps");
     if (LittleFS.exists("/upload.tmp")) LittleFS.remove("/upload.tmp");
   }
   return mounted;
