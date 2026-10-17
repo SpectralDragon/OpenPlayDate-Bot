@@ -1,0 +1,10 @@
+{
+  "name": "OpenPlayNofrendo",
+  "version": "3.0.0",
+  "build": {
+    "flags": [
+      "-O3"
+    ],
+    "includeDir": "src"
+  }
+}

@@ -1,5 +1,6 @@
 #include "console_shell.h"
 #include "rom_store.h"
+#include "nes_store.h"
 #include "ui_text.h"
 #include <WiFi.h>
 
@@ -9,9 +10,10 @@ bool ConsoleShell::begin() {
   canvas_.setAttribute(PSRAM_ENABLE, true);
   if (!canvas_.createSprite(320, 240)) return false;
   const bool storage = roms::begin();
+  if (storage) nesroms::begin();
   Serial.printf("STORAGE: ready=%d\n", storage);
   network_.setStudioCallbacks([this] {
-    if (game_.active()) return false;
+    if (game_.active() || nes_.active()) return false;
     if (lua_.active()) lua_.stop();
     show(Page::Apps);
     return true;
@@ -27,7 +29,7 @@ bool ConsoleShell::begin() {
 }
 
 const char* ConsoleShell::pageName() const {
-  const char* pages[] = {"eyes", "home", "settings", "wifi", "portal", "games", "playing", "paused", "about", "error", "apps", "lua_playing", "lua_paused"};
+  const char* pages[] = {"eyes", "home", "settings", "wifi", "portal", "games", "playing", "paused", "about", "error", "apps", "lua_playing", "lua_paused", "nes_games", "nes_playing", "nes_paused"};
   return pages[static_cast<int>(page_)];
 }
 
@@ -35,7 +37,9 @@ void ConsoleShell::printStatus() const {
   Serial.printf("SHELL: page=%s selected=%d theme=%u idle_ms=%u storage=%d game_frames=%u\n",
                 pageName(), selected_, settings_.theme, settings_.idleMs(), roms::available(), game_.frames());
   game_.printVideoStatus();
+  nes_.printVideoStatus();
   Serial.printf("LUA: active=%d name=%s\n", lua_.active(), lua_.name().c_str());
+  lua_.printVideoStatus();
   Serial.printf("NETWORK: enabled=%d status=%s\n", settings_.wifiEnabled, network_.status().c_str());
   network_.printStatus();
 }
@@ -45,6 +49,7 @@ void ConsoleShell::show(Page page) {
   activityAt_ = millis(); refreshAt_ = 0; dirty_ = true;
   waitRelease_ = true; wasStickDown_ = false;
   if (page == Page::Games) games_ = roms::list();
+  if (page == Page::NesGames) games_ = nesroms::list();
   if (page == Page::Apps) apps_ = opd::list();
   Serial.printf("SHELL: %s\n", pageName());
 }
@@ -58,11 +63,11 @@ void ConsoleShell::sleep() {
 
 int ConsoleShell::itemCount() const {
   switch (page_) {
-    case Page::Home: return 4;
+    case Page::Home: return 5;
     case Page::Settings: return 4;
     case Page::Wifi: return 3;
-    case Page::Games: return games_.size() + 1;
-    case Page::Paused: return 4;
+    case Page::Games: case Page::NesGames: return games_.size() + 1;
+    case Page::Paused: case Page::NesPaused: return 4;
     case Page::Apps: return apps_.size() + 1;
     case Page::LuaPaused: return 2;
     default: return 0;
@@ -80,8 +85,9 @@ void ConsoleShell::select() {
     case Page::Eyes: show(Page::Home); break;
     case Page::Home:
       if (selected_ == 0) show(Page::Games);
-      else if (selected_ == 1) show(Page::Apps);
-      else if (selected_ == 2) show(Page::Settings);
+      else if (selected_ == 1) show(Page::NesGames);
+      else if (selected_ == 2) show(Page::Apps);
+      else if (selected_ == 3) show(Page::Settings);
       else sleep();
       break;
     case Page::Settings:
@@ -98,17 +104,19 @@ void ConsoleShell::select() {
       } else if (selected_ == 1) { network_.setEnabled(!settings_.wifiEnabled); dirty_ = true; }
       else { network_.forget(); dirty_ = true; }
       break;
-    case Page::Games:
+    case Page::Games: case Page::NesGames: {
+      const bool nes = page_ == Page::NesGames;
       if (selected_ == int(games_.size())) {
-        portalReturn_ = Page::Games; network_.startPortal();
+        portalReturn_ = page_; network_.startPortal();
         if (network_.portalActive()) show(Page::Portal);
         else { message_ = "Не удалось включить точку доступа"; show(Page::Error); }
       } else {
         network_.pauseForGame();
-        if (game_.start(games_[selected_])) show(Page::Playing);
-        else { network_.resumeAfterGame(); message_ = game_.error(); show(Page::Error); }
+        if (nes ? nes_.start(games_[selected_]) : game_.start(games_[selected_])) show(nes ? Page::NesPlaying : Page::Playing);
+        else { network_.resumeAfterGame(); message_ = nes ? nes_.error() : game_.error(); show(Page::Error); }
       }
       break;
+    }
     case Page::Apps:
       if (selected_ == int(apps_.size())) {
         portalReturn_ = Page::Apps; network_.startPortal();
@@ -124,16 +132,19 @@ void ConsoleShell::select() {
       if (selected_ == 1) { lua_.stop(); luaPage(Page::Apps); }
       else { lua_.resume(); luaPage(Page::LuaPlaying); }
       break;
-    case Page::Paused:
+    case Page::Paused: case Page::NesPaused: {
+      const bool nes = page_ == Page::NesPaused;
       if (selected_ == 3) {
-        if (game_.stop()) { network_.resumeAfterGame(); show(Page::Games); }
-        else { message_ = game_.error(); show(Page::Error); }
+        if (nes ? nes_.stop() : game_.stop()) { network_.resumeAfterGame(); show(nes ? Page::NesGames : Page::Games); }
+        else { message_ = nes ? nes_.error() : game_.error(); show(Page::Error); }
       } else {
-        if (selected_ == 1) game_.pulseStart();
-        if (selected_ == 2) game_.pulseSelect();
-        game_.resume(); show(Page::Playing);
+        if (selected_ == 1) { if (nes) nes_.pulseStart(); else game_.pulseStart(); }
+        if (selected_ == 2) { if (nes) nes_.pulseSelect(); else game_.pulseSelect(); }
+        if (nes) nes_.resume(); else game_.resume();
+        show(nes ? Page::NesPlaying : Page::Playing);
       }
       break;
+    }
     case Page::Error: back(); break;
     default: break;
   }
@@ -143,14 +154,17 @@ void ConsoleShell::back() {
   if (page_ == Page::Home) sleep();
   else if (page_ == Page::Portal) { network_.stopPortal(); show(portalReturn_); }
   else if (page_ == Page::Wifi || page_ == Page::About) show(Page::Settings);
-  else if (page_ == Page::Settings || page_ == Page::Games || page_ == Page::Apps) show(Page::Home);
+  else if (page_ == Page::Settings || page_ == Page::Games || page_ == Page::NesGames || page_ == Page::Apps) show(Page::Home);
   else if (page_ == Page::LuaPlaying) { lua_.pause(); luaPage(Page::LuaPaused); }
   else if (page_ == Page::LuaPaused) { lua_.resume(); luaPage(Page::LuaPlaying); }
   else if (page_ == Page::Playing) { game_.save(); game_.pause(); show(Page::Paused); }
   else if (page_ == Page::Paused) { game_.resume(); show(Page::Playing); }
+  else if (page_ == Page::NesPlaying) { nes_.save(); nes_.pause(); show(Page::NesPaused); }
+  else if (page_ == Page::NesPaused) { nes_.resume(); show(Page::NesPlaying); }
   else if (page_ == Page::Error) {
     lua_.stop();
-    if (game_.active() && !game_.stop()) { message_ = game_.error(); dirty_ = true; }
+    if (nes_.active() && !nes_.stop()) { message_ = nes_.error(); dirty_ = true; }
+    else if (game_.active() && !game_.stop()) { message_ = game_.error(); dirty_ = true; }
     else { network_.resumeAfterGame(); show(Page::Home); }
   }
 }
@@ -166,12 +180,16 @@ void ConsoleShell::update(uint32_t now, const Controls& controls) {
     if (!controls.aDown && !controls.bDown && !controls.stickDown) waitRelease_ = false;
   } else if (page_ == Page::Eyes) {
     if (controls.nextMood || controls.nextColor || controls.blink) show(Page::Home);
-  } else if (page_ == Page::Playing || page_ == Page::LuaPlaying) {
+  } else if (page_ == Page::Playing || page_ == Page::NesPlaying || page_ == Page::LuaPlaying) {
     if (controls.stickDown && !wasStickDown_) stickAt_ = now;
     if (controls.stickDown && uint32_t(now - stickAt_) >= 700) {
       if (page_ == Page::LuaPlaying) { lua_.pause(); luaPage(Page::LuaPaused); }
+      else if (page_ == Page::NesPlaying) { nes_.save(); nes_.pause(); show(Page::NesPaused); }
       else { game_.save(); game_.pause(); show(Page::Paused); }
-    } else if (!controls.stickDown && wasStickDown_ && page_ == Page::Playing) game_.pulseStart();
+    } else if (!controls.stickDown && wasStickDown_) {
+      if (page_ == Page::Playing) game_.pulseStart();
+      else if (page_ == Page::NesPlaying) nes_.pulseStart();
+    }
     wasStickDown_ = controls.stickDown;
   } else {
     int direction = controls.y > 0.55f ? 1 : controls.y < -0.55f ? -1 : 0;
@@ -200,16 +218,18 @@ void ConsoleShell::update(uint32_t now, const Controls& controls) {
     else if (lua_.exiting()) { lua_.stop(); luaPage(Page::Apps); }
     return;
   }
-  if (page_ == Page::Playing) {
+  if (page_ == Page::Playing || page_ == Page::NesPlaying) {
+    const bool nes = page_ == Page::NesPlaying;
     Controls gameControls = controls;
     if (waitRelease_) gameControls.aDown = gameControls.bDown = gameControls.stickDown = false;
-    game_.update(gameControls);
-    if (!game_.error().isEmpty()) { game_.pause(); message_ = game_.error(); show(Page::Error); }
+    if (nes) nes_.update(gameControls); else game_.update(gameControls);
+    const String error = nes ? nes_.error() : game_.error();
+    if (!error.isEmpty()) { if (nes) nes_.pause(); else game_.pause(); message_ = error; show(Page::Error); }
     return;
   }
   if (controls.aDown || controls.bDown || controls.stickDown ||
       fabsf(controls.x) > 0.3f || fabsf(controls.y) > 0.3f) activityAt_ = now;
-  if (settings_.idleMs() && page_ != Page::Portal && page_ != Page::Paused && page_ != Page::LuaPaused && page_ != Page::Error &&
+  if (settings_.idleMs() && page_ != Page::Portal && page_ != Page::Paused && page_ != Page::NesPaused && page_ != Page::LuaPaused && page_ != Page::Error &&
       uint32_t(now - activityAt_) >= settings_.idleMs()) { sleep(); return; }
   if ((page_ == Page::Wifi || page_ == Page::Portal) && uint32_t(now - refreshAt_) >= 2000) {
     dirty_ = true; refreshAt_ = now;
@@ -245,10 +265,11 @@ void ConsoleShell::render() {
   switch (page_) {
     case Page::Home:
       title("OpenPlay", "Маленькая консоль. Большие истории.");
-      row(62, "Game Boy", "", selected_ == 0, 34);
-      row(100, "Lua-программы", "", selected_ == 1, 34);
-      row(138, "Настройки", "", selected_ == 2, 34);
-      row(176, "Глазки", "", selected_ == 3, 34);
+      row(61, "Game Boy", "", selected_ == 0, 27);
+      row(91, "NES / Денди", "", selected_ == 1, 27);
+      row(121, "Lua-программы", "", selected_ == 2, 27);
+      row(151, "Настройки", "", selected_ == 3, 27);
+      row(181, "Глазки", "", selected_ == 4, 27);
       footer("A: открыть    B: глазки");
       break;
     case Page::Settings: {
@@ -277,8 +298,9 @@ void ConsoleShell::render() {
       uiText(canvas_, network_.status(), 16, 187, p.foreground);
       footer("B: закончить настройку");
       break;
-    case Page::Games: {
-      title("Game Boy", String("Игр: ") + games_.size() + "    .gb / без звука");
+    case Page::Games: case Page::NesGames: {
+      const bool nes = page_ == Page::NesGames;
+      title(nes ? "NES / Денди" : "Game Boy", String("Игр: ") + games_.size() + (nes ? "    .nes / без звука" : "    .gb / без звука"));
       if (games_.empty()) {
         uiText(canvas_, "Пока здесь нет игр", 16, 76, p.foreground, true);
         uiText(canvas_, "Добавим первую с телефона?", 16, 111, p.muted);
@@ -306,8 +328,8 @@ void ConsoleShell::render() {
       uiText(canvas_, "GPIO и UART освобождены", 16, 182, p.muted);
       footer("A: выбрать    B: продолжить");
       break;
-    case Page::Paused: {
-      title("Пауза", "Game Boy");
+    case Page::Paused: case Page::NesPaused: {
+      title("Пауза", page_ == Page::NesPaused ? "NES / Денди" : "Game Boy");
       const char* items[] = {"Продолжить", "Нажать START", "Нажать SELECT", "Сохранить и выйти"};
       for (int i = 0; i < 4; ++i) row(62 + i * 38, items[i], "", selected_ == i, 34);
       footer("A: выбрать    B: продолжить");
@@ -317,9 +339,9 @@ void ConsoleShell::render() {
       title("Наша консоль", "OpenPlay OS 0.1");
       uiText(canvas_, "ESP32-S3 / 16 МБ Flash / 8 МБ RAM", 15, 68, p.foreground);
       uiText(canvas_, "Экран: 320 x 240", 15, 96, p.foreground);
-      uiText(canvas_, "Меню, глазки, Wi-Fi и Game Boy", 15, 124, p.foreground);
+      uiText(canvas_, "Глазки, Wi-Fi, Game Boy и NES", 15, 124, p.foreground);
       uiText(canvas_, "Lua 5.4 / .opd / GPIO и UART", 15, 152, p.muted);
-      uiText(canvas_, "Ядро Game Boy: Peanut-GB / MIT", 15, 180, p.muted);
+      uiText(canvas_, "Peanut-GB / Nofrendo", 15, 180, p.muted);
       footer("B: назад");
       break;
     case Page::Error:
@@ -335,6 +357,7 @@ void ConsoleShell::render() {
 
 void ConsoleShell::screenshot() {
   if (page_ == Page::Playing) { game_.screenshot(); return; }
+  if (page_ == Page::NesPlaying) { nes_.screenshot(); return; }
   if (page_ == Page::Eyes) { Serial.println("SCREEN: eyes; use m for menu"); return; }
   if (dirty_ && page_ != Page::LuaPlaying) { render(); dirty_ = false; }
   TFT_eSprite& screen = page_ == Page::LuaPlaying ? lua_.canvas() : canvas_;
@@ -357,8 +380,9 @@ void ConsoleShell::command(char command) {
   if (command == 'm') {
     if (lua_.active()) { lua_.pause(); luaPage(Page::LuaPaused); }
     else if (game_.active()) { game_.save(); game_.pause(); show(Page::Paused); }
+    else if (nes_.active()) { nes_.save(); nes_.pause(); show(Page::NesPaused); }
     else { network_.stopPortal(); show(Page::Home); }
-  } else if (command == 'z' && !game_.active() && !lua_.active()) sleep();
+  } else if (command == 'z' && !game_.active() && !nes_.active() && !lua_.active()) sleep();
   else if (command == 'a') select();
   else if (command == 'b') back();
   else if (command == 'j') move(1);

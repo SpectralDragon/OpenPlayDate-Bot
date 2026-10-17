@@ -2,6 +2,7 @@
 #include "device_settings.h"
 #include "eyes.h"
 #include "gameboy_app.h"
+#include "nes_app.h"
 #include "network_service.h"
 #include "lua_app.h"
 #include <vector>
@@ -9,7 +10,7 @@
 class ConsoleShell {
  public:
   ConsoleShell(TFT_eSPI& display, Eyes& eyes)
-      : display_(display), eyes_(eyes), canvas_(&display), network_(settings_), game_(display), lua_(display) {}
+      : display_(display), eyes_(eyes), canvas_(&display), network_(settings_), game_(display), nes_(display), lua_(display) {}
   bool begin();
   void update(uint32_t now, const Controls& controls);
   void command(char command);
@@ -17,13 +18,14 @@ class ConsoleShell {
   const char* pageName() const;
   void printStatus() const;
  private:
-  enum class Page { Eyes, Home, Settings, Wifi, Portal, Games, Playing, Paused, About, Error, Apps, LuaPlaying, LuaPaused };
+  enum class Page { Eyes, Home, Settings, Wifi, Portal, Games, Playing, Paused, About, Error, Apps, LuaPlaying, LuaPaused, NesGames, NesPlaying, NesPaused };
   TFT_eSPI& display_;
   Eyes& eyes_;
   TFT_eSprite canvas_;
   DeviceSettings settings_;
   NetworkService network_;
   GameBoyApp game_;
+  NesApp nes_;
   LuaApp lua_;
   Page page_ = Page::Eyes;
   Page portalReturn_ = Page::Wifi;

@@ -77,6 +77,46 @@ return {
     save("shutdown-error", setup + "return {shutdown=function() error('shutdown failed') end}", robot)
     save("paused-shutdown", setup + "return {shutdown=function() opd.gpio.mode(16,'output') end}", robot)
     save("memory-update", "return {update=function() local x=string.rep('a',600000) end}")
+    save("damage", """
+local g, frame = opd.graphics, 0
+return {draw=function()
+  frame = frame + 1
+  g.clear(0); g.color(0xf800)
+  if frame == 1 then g.pixel(15,7)
+  elseif frame == 2 or frame == 3 then g.pixel(16,8)
+  elseif frame == 4 then g.pixel(319,239)
+  elseif frame == 5 then
+    for y=0,239,8 do for x=0,319,16 do
+      if (x//16+y//8)%2 == 0 then g.pixel(x,y) end
+    end end
+  end
+end}
+""")
+    colors = (0xF800, 0x07E0, 0x001F, 0xFFFF, 0x1234, 0xABCD)
+    tile = struct.pack("<4sHH6H", b"OPI1", 3, 2, *colors)
+    save("images", """
+local g = opd.graphics
+return {draw=function()
+  g.clear(0)
+  g.image('tile.opi', -1, -1)
+  g.image('tile.opi', 319, 239)
+  g.image('tile.opi', 10, 10)
+end}
+""", extra={"tile.opi": tile})
+    big = struct.pack("<4sHH", b"OPI1", 320, 240)
+    save("image-eviction", """
+local g = opd.graphics
+return {draw=function()
+  for i=1,9 do g.image('tile'..i..'.opi', i, 0) end
+  g.image('red.opi', 0, 0); g.image('blue.opi', 0, 0)
+  g.image('red.opi', 0, 0)
+end}
+""", extra={**{f"tile{i}.opi": tile for i in range(1, 10)},
+            "red.opi": big + struct.pack("<H", 0xF800) * (320*240),
+            "blue.opi": big + struct.pack("<H", 0x001F) * (320*240)})
+    for name, data in {"image-header": b"OPI", "image-size": tile[:-1],
+                       "image-dimensions": struct.pack("<4sHH", b"OPI1", 321, 1)}.items():
+        save(name, "return {draw=function() opd.graphics.image('bad.opi',0,0) end}", extra={"bad.opi": data})
 
     def raw_bundle(manifest, entries):
         raw_manifest = json.dumps(manifest, separators=(",", ":")).encode()

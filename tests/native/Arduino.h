@@ -36,6 +36,7 @@ constexpr int INPUT = 1, OUTPUT = 3, INPUT_PULLUP = 5, INPUT_PULLDOWN = 9, LOW =
 extern uint32_t testNow;
 extern int testModes[49], testLevels[49];
 inline uint32_t millis() { return testNow; }
+inline uint32_t micros() { return testNow * 1000; }
 inline void pinMode(int pin, int mode) {
   testModes[pin] = mode;
 #ifdef OPENPLAY_DESKTOP

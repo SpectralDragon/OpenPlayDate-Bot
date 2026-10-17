@@ -6,6 +6,8 @@ extern "C" {
 #include <lualib.h>
 }
 #include "lua_app.h"
+#include "lua_video.h"
+#include "lua_audio.h"
 #include "ui_text.h"
 #include <esp_heap_caps.h>
 #include <algorithm>
@@ -13,10 +15,12 @@ extern "C" {
 
 namespace {
 constexpr size_t memoryLimit = 512 * 1024;
+constexpr size_t imageCacheLimit = 256 * 1024;
 enum Operation {
   Clear, Color, Pixel, Line, Rect, FillRect, Circle, FillCircle, Text, Image, Rgb,
   Down, Pressed, Released, Axis, Millis, Exit, Log, ReadAsset, Require,
-  GpioMode, GpioRead, GpioWrite, UartOpen, UartRead, UartWrite, UartAvailable
+  GpioMode, GpioRead, GpioWrite, UartOpen, UartRead, UartWrite, UartAvailable,
+  AudioPlay, AudioStop
 };
 struct Binding { const char* name; Operation op; };
 const Binding graphics[] = {{"clear", Clear}, {"color", Color}, {"pixel", Pixel}, {"line", Line},
@@ -25,6 +29,7 @@ const Binding graphics[] = {{"clear", Clear}, {"color", Color}, {"pixel", Pixel}
 const Binding input[] = {{"down", Down}, {"pressed", Pressed}, {"released", Released}, {"axis", Axis}};
 const Binding systemApi[] = {{"millis", Millis}, {"exit", Exit}, {"log", Log}};
 const Binding assets[] = {{"read", ReadAsset}};
+const Binding audio[] = {{"play", AudioPlay}, {"stop", AudioStop}};
 const Binding gpio[] = {{"mode", GpioMode}, {"read", GpioRead}, {"write", GpioWrite}};
 const Binding uart[] = {{"open", UartOpen}, {"read", UartRead}, {"write", UartWrite}, {"available", UartAvailable}};
 // int32 arguments are narrowed only after validation, avoiding wrapped coordinates.
@@ -114,6 +119,8 @@ int LuaApp::boot(lua_State* state) {
   bind("input", input, sizeof(input) / sizeof(*input));
   bind("system", systemApi, sizeof(systemApi) / sizeof(*systemApi));
   bind("assets", assets, sizeof(assets) / sizeof(*assets));
+  bind("audio", audio, sizeof(audio) / sizeof(*audio));
+  lua_getfield(state,-1,"audio"); lua_pushboolean(state,openplayaudio::available); lua_setfield(state,-2,"available"); lua_pop(state,1);
   if (app->bundle_.manifest().kind == "robot") {
     bind("gpio", gpio, sizeof(gpio) / sizeof(*gpio));
     bind("uart", uart, sizeof(uart) / sizeof(*uart));
@@ -133,6 +140,8 @@ int LuaApp::boot(lua_State* state) {
 
 bool LuaApp::start(const String& name) {
   stop(); error_ = ""; exit_ = false; paused_ = false;
+  video_ = VideoStats{};
+  sampleAt_ = millis(); sampleFrames_ = sampleDisplayed_ = 0;
   down_ = pressed_ = released_ = 0;
   memset(pinModes_, -1, sizeof(pinModes_));
   if (opd::safeName(name).isEmpty()) { error_ = "Неверное имя .opd"; return false; }
@@ -140,6 +149,9 @@ bool LuaApp::start(const String& name) {
   canvas_.setColorDepth(16); canvas_.setAttribute(PSRAM_ENABLE, true);
   if (!canvas_.createSprite(320, 240)) { error_ = "Не хватает памяти экрана"; bundle_.close(); return false; }
   canvas_.fillSprite(TFT_BLACK); canvas_.setTextColor(TFT_WHITE, TFT_BLACK);
+  // Optional: retain the original full-frame path if PSRAM is exhausted.
+  presented_ = static_cast<uint16_t*>(heap_caps_malloc(luavideo::frameBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  presentedValid_ = false;
   state_ = lua_newstate(allocate, this);
   if (!state_) { error_ = "Не хватает памяти Lua"; stop(); return false; }
   *static_cast<LuaApp**>(lua_getextraspace(state_)) = this;
@@ -148,6 +160,7 @@ bool LuaApp::start(const String& name) {
   if (lua_pcall(state_, 1, 0, 0) != LUA_OK) { fail(); return false; }
   if (!invoke("init")) return false;
   nextFrame_ = lastFrame_ = millis();
+  sampleAt_ = lastFrame_;
   return true;
 }
 
@@ -163,7 +176,121 @@ void LuaApp::releaseHardware() {
   }
 }
 
+void LuaApp::releaseGraphics() {
+  free(presented_); presented_ = nullptr; presentedValid_ = false;
+  for (auto& image : images_) { free(image.pixels); image = CachedImage{}; }
+  imageBytes_ = 0; imageUse_ = 0;
+  canvas_.deleteSprite();
+}
+
+void LuaApp::present() {
+  if (!presented_) {
+    canvas_.pushSprite(0, 0); ++video_.displayed; video_.bytes += luavideo::frameBytes;
+    return;
+  }
+  const auto* frame = static_cast<const uint16_t*>(canvas_.getPointer());
+  const auto damage = luavideo::findDamage(frame, presented_, presentedValid_);
+  if (damage.count) display_.startWrite();
+  for (size_t i = 0; i < damage.count; ++i) {
+    const auto& r = damage.rects[i];
+    // Use the same TFT_eSPI sprite writer and byte order as full frames.
+    canvas_.pushSprite(r.x, r.y, r.x, r.y, r.w, r.h);
+    video_.bytes += r.w * r.h * sizeof(uint16_t);
+    for (int y = r.y; y < r.y + r.h; ++y)
+      memcpy(presented_ + y * luavideo::width + r.x,
+             frame + y * luavideo::width + r.x, r.w * sizeof(uint16_t));
+  }
+  if (damage.count) { display_.endWrite(); ++video_.displayed; }
+  presentedValid_ = true;
+}
+
+void LuaApp::drawImage(lua_State* state, const opd::Entry& entry, int x, int y) {
+  auto paint = [this,x,y](CachedImage& image) {
+    const bool swap = canvas_.getSwapBytes(); canvas_.setSwapBytes(false);
+    if (!image.masked) canvas_.pushImage(x,y,image.width,image.height,image.pixels);
+    else {
+      const uint8_t* mask = reinterpret_cast<const uint8_t*>(image.pixels + size_t(image.width)*image.height);
+      for (int iy=std::max(0,-y); iy<std::min(int(image.height),240-y); ++iy) {
+        int ix=std::max(0,-x), end=std::min(int(image.width),320-x);
+        auto visible = [&](int column) { size_t bit=size_t(iy)*image.width+column; return mask[bit>>3] & (1<<(bit&7)); };
+        while (ix<end) {
+          while(ix<end && !visible(ix)) ++ix;
+          int start=ix; while(ix<end && visible(ix)) ++ix;
+          if(ix>start) canvas_.pushImage(x+start,y+iy,ix-start,1,image.pixels+size_t(iy)*image.width+start);
+        }
+      }
+    }
+    canvas_.setSwapBytes(swap);
+  };
+  ++imageUse_;
+  for (auto& image : images_) {
+    if (image.entry != &entry) continue;
+    ++video_.cacheHits;
+    image.used = imageUse_;
+    paint(image);
+    return;
+  }
+  ++video_.cacheMisses;
+  uint8_t header[8];
+  if (!bundle_.read(entry, 0, header, sizeof(header)) || (memcmp(header, "OPI1", 4) && memcmp(header, "OPI2", 4)))
+    luaL_error(state, "expected OPI1 or OPI2 image");
+  const int width = header[4] | (header[5] << 8), height = header[6] | (header[7] << 8);
+  const bool masked=header[3]=='2';
+  const size_t pixels = size_t(width)*height, pixelBytes=pixels*2, bytes=pixelBytes+(masked?(pixels+7)/8:0);
+  if (!width || !height || width > 320 || height > 240 || entry.size != 8 + bytes)
+    luaL_error(state, "invalid image dimensions");
+  if (x >= 320 || y >= 240 || x + width <= 0 || y + height <= 0) return;
+
+  auto oldest = [this]() -> CachedImage& {
+    CachedImage* result = &images_[0];
+    for (auto& image : images_) {
+      if (!image.pixels) return image;
+      if (uint32_t(imageUse_ - image.used) > uint32_t(imageUse_ - result->used)) result = &image;
+    }
+    return *result;
+  };
+  auto evict = [this](CachedImage& image) {
+    const size_t count=size_t(image.width)*image.height;
+    imageBytes_ -= count*2+(image.masked?(count+7)/8:0);
+    free(image.pixels); image = CachedImage{};
+  };
+  while (imageBytes_ + bytes > imageCacheLimit) {
+    // All slots are occupied or there is a byte budget to reclaim. Ignore
+    // empty slots when selecting an eviction victim.
+    CachedImage* victim = nullptr;
+    for (auto& image : images_)
+      if (image.pixels && (!victim || uint32_t(imageUse_ - image.used) > uint32_t(imageUse_ - victim->used))) victim = &image;
+    evict(*victim);
+  }
+  auto& image = oldest();
+  if (image.pixels) evict(image);
+  image.pixels = static_cast<uint16_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (image.pixels) {
+    image.width = width; image.height = height; image.masked=masked; imageBytes_ += bytes;
+    if (!bundle_.read(entry, 8, image.pixels, bytes)) luaL_error(state, "image read failed");
+    // Convert once on load; repeated draws become clipped row memcpy calls.
+    for (size_t i = 0; i < pixels; ++i) {
+      const uint16_t color = image.pixels[i];
+      image.pixels[i] = uint16_t((color << 8) | (color >> 8));
+    }
+    image.entry = &entry; image.used = imageUse_;
+    paint(image);
+    return;
+  }
+  if(masked) luaL_error(state,"not enough memory for transparent image");
+  // Low-memory fallback still blits rows in bulk and only reads visible rows.
+  uint16_t row[320];
+  const int first = std::max(0, -y), end = std::min(height, 240 - y);
+  for (int iy = first; iy < end; ++iy) {
+    if (!bundle_.read(entry, 8 + iy * width * 2, row, width * 2)) luaL_error(state, "image read failed");
+    const bool swap = canvas_.getSwapBytes(); canvas_.setSwapBytes(true);
+    canvas_.pushImage(x, y + iy, width, 1, row);
+    canvas_.setSwapBytes(swap);
+  }
+}
+
 void LuaApp::fail() {
+  openplayaudio::command("stop");
   // Do not copy an unbounded Lua error into the ESP32's internal heap, or
   // allocate a Lua string outside pcall when the error object is a number.
   char message[241]; size_t length = 0;
@@ -175,7 +302,7 @@ void LuaApp::fail() {
   Serial.printf("LUA ERROR: %s\n", error_.c_str());
   // A failing shutdown must not prevent hardware cleanup.
   releaseHardware(); lua_close(state_); state_ = nullptr; appRef_ = LUA_NOREF;
-  canvas_.deleteSprite(); bundle_.close();
+  releaseGraphics(); bundle_.close();
 }
 
 int LuaApp::dispatch(lua_State* state) {
@@ -209,21 +336,43 @@ void LuaApp::update(uint32_t now, const Controls& controls) {
   if (int32_t(now - nextFrame_) < 0) return;
   float dt = std::min(uint32_t(now - lastFrame_), uint32_t(250)) / 1000.0f;
   lastFrame_ = now; nextFrame_ = now + 1000 / bundle_.manifest().fps;
+  const uint32_t callbackAt = micros();
   if (!invoke("update", dt) || exit_) return;
   if (!invoke("draw") || exit_) return;
-  canvas_.pushSprite(0, 0);
+  video_.callbackUs += uint32_t(micros() - callbackAt);
+  const uint32_t presentAt = micros();
+  present();
+  video_.presentUs += uint32_t(micros() - presentAt); ++video_.frames;
   pressed_ = released_ = 0;
 }
 
 void LuaApp::pause() {
   if (!state_ || paused_) return;
   invoke("pause"); releaseHardware(); paused_ = true;
+  openplayaudio::command("pause");
 }
 
 void LuaApp::resume() {
   if (!state_ || !paused_) return;
   paused_ = false; down_ = pressed_ = released_ = 0;
+  presentedValid_ = false; // The system pause menu overwrote the LCD.
   nextFrame_ = lastFrame_ = millis(); invoke("resume");
+  openplayaudio::command("resume");
+  sampleAt_ = millis(); sampleFrames_ = video_.frames; sampleDisplayed_ = video_.displayed;
+}
+
+void LuaApp::printVideoStatus() const {
+  if (!state_) return;
+  const uint32_t now = millis(), elapsed = now - sampleAt_;
+  Serial.printf("LUA_VIDEO: frames=%u displayed=%u target_fps=%u fps=%.1f lcd_fps=%.1f callback_us=%u present_us=%u bytes=%llu cache_hits=%u cache_misses=%u cache_bytes=%u partial=%d\n",
+                video_.frames, video_.displayed, unsigned(bundle_.manifest().fps),
+                elapsed ? (video_.frames - sampleFrames_) * 1000.0f / elapsed : 0.0f,
+                elapsed ? (video_.displayed - sampleDisplayed_) * 1000.0f / elapsed : 0.0f,
+                unsigned(video_.frames ? video_.callbackUs / video_.frames : 0),
+                unsigned(video_.frames ? video_.presentUs / video_.frames : 0),
+                static_cast<unsigned long long>(video_.bytes), video_.cacheHits, video_.cacheMisses,
+                unsigned(imageBytes_), presented_ != nullptr);
+  sampleAt_ = now; sampleFrames_ = video_.frames; sampleDisplayed_ = video_.displayed;
 }
 
 void LuaApp::stop() {
@@ -234,7 +383,8 @@ void LuaApp::stop() {
     if (state_) lua_close(state_);
   }
   state_ = nullptr; appRef_ = LUA_NOREF; memory_ = 0;
-  canvas_.deleteSprite(); bundle_.close();
+  openplayaudio::command("stop");
+  releaseGraphics(); bundle_.close();
 }
 
 int LuaApp::api(lua_State* state) {
@@ -279,17 +429,8 @@ int LuaApp::api(lua_State* state) {
         if (!app.bundle_.read(*entry, 0, data, entry->size)) return luaL_error(state, "asset read failed");
         luaL_pushresultsize(&buffer, entry->size); return 1;
       }
-      uint8_t header[8];
-      if (!app.bundle_.read(*entry, 0, header, 8) || memcmp(header, "OPI1", 4)) return luaL_error(state, "expected OPI1 image");
-      int width = header[4] | (header[5] << 8), height = header[6] | (header[7] << 8);
-      if (!width || !height || width > 320 || height > 240 || entry->size != size_t(8 + width * height * 2))
-        return luaL_error(state, "invalid image dimensions");
       int x = coordinate(state, 2), y = coordinate(state, 3);
-      uint8_t row[640];
-      for (int iy = 0; iy < height; ++iy) {
-        if (!app.bundle_.read(*entry, 8 + iy * width * 2, row, width * 2)) return luaL_error(state, "image read failed");
-        for (int ix = 0; ix < width; ++ix) canvas.drawPixel(x + ix, y + iy, row[ix * 2] | (row[ix * 2 + 1] << 8));
-      }
+      app.drawImage(state, *entry, x, y);
       break;
     }
     case Down: lua_pushboolean(state, app.down_ & button(state)); return 1;
@@ -300,6 +441,18 @@ int LuaApp::api(lua_State* state) {
       lua_pushnumber(state, luaL_checkoption(state, 1, nullptr, names) == 0 ? app.axisX_ : app.axisY_); return 1;
     }
     case Millis: lua_pushinteger(state, millis()); return 1;
+    case AudioPlay: {
+      const char* path=luaL_checkstring(state,1); const auto* entry=app.bundle_.find(path);
+      uint8_t header[44];
+      if(!entry || entry->size<46 || entry->size>1323044 || !app.bundle_.read(*entry,0,header,44)) return luaL_error(state,"expected imported PCM WAV sound");
+      auto u16=[&](int i) { return uint16_t(header[i]) | (uint16_t(header[i+1])<<8); };
+      auto u32=[&](int i) { return uint32_t(header[i]) | (uint32_t(header[i+1])<<8) | (uint32_t(header[i+2])<<16) | (uint32_t(header[i+3])<<24); };
+      if(memcmp(header,"RIFF",4) || memcmp(header+8,"WAVEfmt ",8) || memcmp(header+36,"data",4) || u32(4)!=entry->size-8 || u32(16)!=16 || u16(20)!=1 || u16(22)!=1 || u32(24)!=22050 || u32(28)!=44100 || u16(32)!=2 || u16(34)!=16 || u32(40)!=entry->size-44 || (entry->size-44)%2)
+        return luaL_error(state,"expected imported PCM WAV sound");
+      if(app.paused_) return luaL_error(state,"audio unavailable while paused");
+      openplayaudio::command("play",path,lua_toboolean(state,2));lua_pushboolean(state,openplayaudio::available);return 1;
+    }
+    case AudioStop: openplayaudio::command("stop"); break;
     case Exit: app.exit_ = true; break;
     case Log: {
       size_t length; const char* text = luaL_checklstring(state, 1, &length);

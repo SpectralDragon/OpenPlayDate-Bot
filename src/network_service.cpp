@@ -1,5 +1,6 @@
 #include "network_service.h"
 #include "rom_store.h"
+#include "nes_store.h"
 #include "opd_bundle.h"
 #include <WiFi.h>
 #include <LittleFS.h>
@@ -118,6 +119,7 @@ String NetworkService::studioInfo(bool session) const {
   doc["id"] = id; doc["name"] = apName_; doc["port"] = 80;
   doc["api"] = 1; doc["maxBundle"] = opd::maxBundleSize;
   doc["storage"] = roms::available();
+  doc["imageVersion"] = 2; doc["audio"] = false;
   if (session) doc["token"] = token_;
   String json; serializeJson(doc, json); return json;
 }
@@ -184,6 +186,12 @@ void NetworkService::page() {
     for (const String& name : roms::list()) page += "<li>" + html(name) + "</li>";
     page += "</ul><p>Свободно: " + String((LittleFS.totalBytes() - LittleFS.usedBytes()) / 1024) + " КБ</p>";
   } else page += "<p>Хранилище недоступно. Файлы не стирались.</p>";
+  page += "</section><section><h2>NES / Денди</h2><p>Игры .nes (iNES 1.0), до 2 МБ. Один игрок, без звука.</p>";
+  if (roms::available()) {
+    page += "<form action='/nes?token=" + token_ + "' method='post' enctype='multipart/form-data'><label>Файл игры<input type='file' name='rom' accept='.nes' required></label><button>Загрузить игру NES</button></form><small>После загрузки откройте NES / Денди на консоли. Поддерживаются картриджи типов 0, 1, 2, 3, 4, 7, 9, 10, 11 и 66.</small><ul>";
+    for (const String& name : nesroms::list()) page += "<li>" + html(name) + "</li>";
+    page += "</ul>";
+  } else page += "<p>Хранилище недоступно.</p>";
   page += "</section><section><h2>Lua-программы</h2><p>Свои игры и программы для робота: .opd, до 2 МБ.</p>";
   if (roms::available()) {
     page += "<form action='/opd?token=" + token_ + "' method='post' enctype='multipart/form-data'><label>Файл программы<input type='file' name='opd' accept='.opd' required></label><button>Загрузить программу</button></form><small>После загрузки откройте Lua-программы на консоли.</small><ul>";
@@ -243,7 +251,7 @@ void NetworkService::routes() {
   server_.on("/rom", HTTP_POST, [this] {
     if (!portal_) { server_.send(403); return; }
     if (!authorized()) return;
-    bool completed = uploadComplete_ && !uploadBundle_;
+    bool completed = uploadComplete_ && !uploadBundle_ && !uploadNes_;
     uploadComplete_ = false;
     if (!completed && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
     if (!uploadError_.isEmpty()) {
@@ -251,6 +259,17 @@ void NetworkService::routes() {
     }
     server_.send(200, "text/html; charset=utf-8", "<meta charset='utf-8'><p>Игра загружена! Вернитесь в Game Boy на консоли.</p><a href='/'>Назад</a>");
   }, [this] { uploadChunk(); });
+  server_.on("/nes", HTTP_POST, [this] {
+    if (!portal_) { server_.send(403); return; }
+    if (!authorized()) return;
+    const bool completed = uploadComplete_ && uploadNes_ && !uploadBundle_;
+    uploadComplete_ = false;
+    if (!completed && uploadError_.isEmpty()) uploadError_ = "Файл не был загружен";
+    if (!uploadError_.isEmpty()) {
+      server_.send(400, "text/plain; charset=utf-8", uploadError_); return;
+    }
+    server_.send(200, "text/html; charset=utf-8", "<meta charset='utf-8'><p>Игра загружена! Откройте NES / Денди на консоли.</p><a href='/'>Назад</a>");
+  }, [this] { uploadChunk(false, false, true); });
   server_.on("/opd", HTTP_POST, [this] {
     if (!portal_) { server_.send(403); return; }
     if (!authorized()) return;
@@ -266,22 +285,24 @@ void NetworkService::routes() {
   });
 }
 
-void NetworkService::uploadChunk(bool bundle, bool studio) {
+void NetworkService::uploadChunk(bool bundle, bool studio, bool nes) {
+  const String directory = bundle ? "/apps/" : nes ? "/nes/" : "/roms/";
   HTTPUpload& event = server_.upload();
   if (event.status == UPLOAD_FILE_START) {
     if (upload_) upload_.close();
     uploadError_ = ""; uploadBytes_ = 0; uploadComplete_ = false;
-    uploadBundle_ = bundle; studioUpload_ = studio;
-    uploadName_ = bundle ? opd::safeName(event.filename) : roms::safeName(event.filename);
+    uploadBundle_ = bundle; studioUpload_ = studio; uploadNes_ = nes;
+    uploadName_ = bundle ? opd::safeName(event.filename) : nes ? nesroms::safeName(event.filename) : roms::safeName(event.filename);
     if ((!studio && !portal_) || server_.arg("token") != token_ ||
         (studio && (server_.header("X-OpenPlay-Studio") != "1" || !server_.header("Origin").isEmpty()))) uploadError_ = "Нет доступа";
     else if (!roms::available()) uploadError_ = "Хранилище недоступно";
-    else if (uploadName_.isEmpty()) uploadError_ = bundle ? "Нужен .opd с именем a-z, 0-9, - или _" : "Нужен .gb с именем латиницей";
-    else if ((bundle ? opd::list().size() : roms::list().size()) >= 32 &&
-             !LittleFS.exists((bundle ? "/apps/" : "/roms/") + uploadName_))
+    else if (uploadName_.isEmpty()) uploadError_ = bundle ? "Нужен .opd с именем a-z, 0-9, - или _" : nes ? "Нужен .nes с именем латиницей" : "Нужен .gb с именем латиницей";
+    else if (nes && !nesroms::begin()) uploadError_ = "Не удалось открыть хранилище NES";
+    else if ((bundle ? opd::list().size() : nes ? nesroms::list().size() : roms::list().size()) >= 32 &&
+             !LittleFS.exists(directory + uploadName_))
       uploadError_ = "В списке уже 32 файла";
     if (studio && uploadError_.isEmpty() && (!prepareStudio_ || !prepareStudio_()))
-      uploadError_ = "Закройте Game Boy на консоли перед загрузкой";
+      uploadError_ = "Закройте игру на консоли перед загрузкой";
     if (uploadError_.isEmpty()) {
       upload_ = LittleFS.open("/upload.tmp", "w");
       if (!upload_) uploadError_ = "Не удалось создать файл";
@@ -300,9 +321,9 @@ void NetworkService::uploadChunk(bool bundle, bool studio) {
         candidate.close();
       } else {
         File file = LittleFS.open("/upload.tmp", "r");
-        uploadError_ = roms::validate(file); file.close();
+        uploadError_ = nes ? nesroms::validate(file) : roms::validate(file); file.close();
       }
-      if (uploadError_.isEmpty() && !LittleFS.rename("/upload.tmp", ((bundle ? "/apps/" : "/roms/") + uploadName_).c_str()))
+      if (uploadError_.isEmpty() && !LittleFS.rename("/upload.tmp", (directory + uploadName_).c_str()))
         uploadError_ = "Не удалось сохранить файл";
       uploadComplete_ = uploadError_.isEmpty();
     }

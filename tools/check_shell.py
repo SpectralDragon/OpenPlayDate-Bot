@@ -36,16 +36,17 @@ def main():
 
     try:
         initial, _ = query()
-        if initial in ('playing', 'paused', 'portal', 'lua_playing', 'lua_paused'):
+        if initial in ('playing', 'paused', 'nes_playing', 'nes_paused', 'portal', 'lua_playing', 'lua_paused'):
             raise RuntimeError('Close the game or Wi-Fi setup before running the test')
         for commands, expected in [
             ('z', ('eyes', 0)), ('a', ('home', 0)),
             ('b', ('eyes', 0)), ('m', ('home', 0)),
-            ('j', ('home', 1)), ('a', ('apps', 0)),
-            ('b', ('home', 0)), ('jj', ('home', 2)), ('a', ('settings', 0)),
+            ('j', ('home', 1)), ('a', ('nes_games', 0)),
+            ('b', ('home', 0)), ('jj', ('home', 2)), ('a', ('apps', 0)),
+            ('b', ('home', 0)), ('jjj', ('home', 3)), ('a', ('settings', 0)),
             ('j', ('settings', 1)), ('k', ('settings', 0)),
             ('b', ('home', 0)), ('a', ('games', 0)),
-            ('b', ('home', 0)), ('k', ('home', 3)),
+            ('b', ('home', 0)), ('k', ('home', 4)),
             ('a', ('eyes', 0)), ('m', ('home', 0)),
         ]:
             actual = query(commands)

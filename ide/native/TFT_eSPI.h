@@ -2,10 +2,15 @@
 #include "Arduino.h"
 constexpr int PSRAM_ENABLE = 1;
 constexpr uint16_t TFT_BLACK = 0, TFT_WHITE = 65535;
-class TFT_eSPI {};
+class TFT_eSPI {
+ public:
+  void startWrite() {}
+  void endWrite() {}
+};
 // Desktop display adapter. LuaApp and uiText are the actual firmware sources.
 class TFT_eSprite {
   std::vector<uint16_t> pixels_;
+  bool swap_ = false;
  public:
   uint32_t textcolor = TFT_WHITE;
   explicit TFT_eSprite(TFT_eSPI*) {}
@@ -16,6 +21,17 @@ class TFT_eSprite {
   void fillSprite(uint16_t c) { std::fill(pixels_.begin(), pixels_.end(), c); }
   void setTextColor(uint16_t c, uint16_t = 0) { textcolor = c; }
   void pushSprite(int, int) {}
+  bool pushSprite(int, int, int, int, int, int) { return true; }
+  void* getPointer() { return pixels_.data(); }
+  bool getSwapBytes() const { return swap_; }
+  void setSwapBytes(bool swap) { swap_ = swap; }
+  void pushImage(int x, int y, int w, int h, uint16_t* data) {
+    for (int iy = std::max(0, -y); iy < std::min(h, 240-y); ++iy)
+      for (int ix = std::max(0, -x); ix < std::min(w, 320-x); ++ix) {
+        uint16_t c = data[iy*w+ix];
+        drawPixel(x+ix, y+iy, swap_ ? c : uint16_t((c << 8) | (c >> 8)));
+      }
+  }
   const uint16_t* pixels() const { return pixels_.data(); }
   void drawPixel(int x, int y, uint16_t c) {
     if (x >= 0 && x < 320 && y >= 0 && y < 240 && !pixels_.empty()) pixels_[y * 320 + x] = c;

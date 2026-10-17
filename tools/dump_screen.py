@@ -1,4 +1,4 @@
-"""Dump the device's current menu or displayed Game Boy frame as a PPM image."""
+"""Dump the device's current menu, Lua, Game Boy or NES frame as a PPM image."""
 import argparse
 import time
 from pathlib import Path

@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; worker-src 'self' blob:; connect-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'">
   <title>OpenPlay Studio</title>
+  <script src="preferences.js"></script>
   <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="blocks.css">
+  <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="media.css">
 </head>
 <body>
 <svg class="symbols" aria-hidden="true"><defs>
@@ -25,17 +29,24 @@
   <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM20 2v4M18 4h4"/></symbol>
 </defs></svg>
 <header class="topbar">
   <div class="brand"><span class="brand-mark">o<span>p</span></span><span>OpenPlay <b>Studio</b><small>ТВОЯ МАЛЕНЬКАЯ ИГРОВАЯ МАСТЕРСКАЯ</small></span></div>
   <div class="project-crumb"><svg><use href="#i-folder"/></svg><span id="project-name">Загрузка проекта…</span><span class="crumb-divider">/</span><span id="crumb-file">main.lua</span></div>
+  <button id="agent-toggle" class="quiet agent-toggle"><svg><use href="#i-spark"/></svg>Помощник <span>ACP</span></button>
   <button id="api" class="quiet"><svg><use href="#i-book"/></svg>Справочник API <kbd>F1</kbd></button>
+  <button id="theme-toggle" class="quiet" aria-label="Переключить тему">☀ Светлая</button>
 </header>
 <div class="workspace">
   <aside class="sidebar">
     <div class="section-label">ПРОЕКТ <span class="sidebar-actions"><button id="new-file" class="icon-button" title="Новый файл" aria-label="Новый файл"><svg><use href="#i-plus"/></svg></button><button id="open" class="icon-button" title="Открыть проект · Ctrl+O" aria-label="Открыть проект"><svg><use href="#i-folder"/></svg></button></span></div>
     <div class="project-root"><span class="root-dot"></span><span id="root-name">bouncing-ball</span><span class="version-tag">API 1</span></div>
     <nav id="files" aria-label="Файлы проекта"></nav>
+    <section id="block-sprites" hidden aria-label="Персонажи"><div class="section-label">МОИ ПЕРСОНАЖИ</div><div id="sprite-list"></div><button id="sprite-add" class="quiet">+ Ещё персонаж</button></section>
+    <details id="media-panel" class="media-panel" open><summary>Картинки и музыка <span id="media-count">0</span></summary><div class="media-import-buttons"><button id="import-image">+ Картинка</button><button id="import-sound">+ Музыка</button></div><div id="media-list"></div><p id="media-empty">Добавь свой рисунок или мелодию.</p></details>
+    <button id="new-blocks" class="new-project blocks-new">✦ Игра из блоков</button>
     <button id="new-project" class="new-project"><svg><use href="#i-plus"/></svg>Новый проект</button>
     <div class="sidebar-bottom">
       <div class="starter-card"><span class="eyebrow">ЕСТЬ ИДЕЯ?</span><h3>Давай оживим её.</h3><p>Начни с шарика или напиши программу для робота.</p><button id="new-robot"><svg><use href="#i-chip"/></svg>Проект для робота <span>↗</span></button></div>
@@ -43,11 +54,25 @@
     </div>
   </aside>
   <main class="editor-pane">
-    <div class="editor-toolbar"><div class="editor-title"><svg><use href="#i-code"/></svg>Код <span id="dirty-label">Всё сохранено</span></div><div class="toolbar-actions"><button id="save" class="quiet" title="Сохранить все файлы · Ctrl+S"><svg><use href="#i-save"/></svg>Сохранить</button><button id="export" class="quiet" title="Собрать .opd · Ctrl+Shift+B"><svg><use href="#i-box"/></svg>Собрать .opd</button><button id="run" class="primary" title="Сохранить и запустить · F5"><svg><use href="#i-play"/></svg>Запустить <kbd>F5</kbd></button></div></div>
+    <div class="editor-toolbar"><div class="editor-title"><button id="blocks-mode" class="mode-button" hidden>Блоки</button><button id="code-mode" class="mode-button selected">Lua</button><span id="dirty-label">Всё сохранено</span></div><div class="toolbar-actions"><button id="save" class="quiet" title="Сохранить все файлы · Ctrl+S"><svg><use href="#i-save"/></svg>Сохранить</button><button id="export" class="quiet" title="Собрать .opd · Ctrl+Shift+B"><svg><use href="#i-box"/></svg>Собрать .opd</button><button id="run" class="primary" title="Сохранить и запустить · F5"><svg><use href="#i-play"/></svg>Запустить <kbd>F5</kbd></button></div></div>
     <div id="tabs" class="tabs" role="tablist" aria-label="Открытые файлы"></div>
     <div id="editor"><div class="loading">Открываем мастерскую…</div></div>
-    <div class="console">
-      <div class="console-head"><span>КОНСОЛЬ <span id="log-count" class="count">0</span></span><div><span class="console-hint">Сообщения твоей программы</span><button id="clear-log" class="text-button">Очистить</button></div></div>
+    <section id="blocks-editor" hidden aria-label="Редактор блоков">
+      <div class="blocks-intro"><strong>Собери свою игру</strong><span>Выбери героя → соедини блоки → нажми «Запустить»</span></div>
+      <div class="sprite-properties">
+        <label>Имя<input id="sprite-name" maxlength="30" aria-label="Имя персонажа"></label>
+        <label>Вид<select id="sprite-look" aria-label="Вид персонажа"></select></label>
+        <label>Цвет<select id="sprite-color" aria-label="Цвет персонажа"></select></label>
+        <label>X<input id="sprite-x" type="number" min="0" max="320" aria-label="X персонажа"></label>
+        <label>Y<input id="sprite-y" type="number" min="0" max="240" aria-label="Y персонажа"></label>
+        <label>Размер<input id="sprite-size" type="number" min="4" max="32" aria-label="Размер персонажа"></label>
+      </div>
+      <div class="blocks-tools"><span id="blocks-hero"></span><button id="blocks-undo" class="text-button">↶ Отменить</button><button id="blocks-redo" class="text-button">↷ Вернуть</button><button id="blocks-tidy" class="text-button">Разложить</button></div>
+      <div id="blockly-workspace"></div>
+      <div id="blocks-hint" role="status">Жёлтый блок начинает цепочку. Блоки внутри выполняются по порядку.</div>
+    </section>
+    <div id="journal" class="console">
+      <div class="console-head"><button id="log-toggle" aria-expanded="true" aria-controls="logs" title="Свернуть или развернуть журнал · Ctrl+J"><span id="log-chevron">▾</span>ЖУРНАЛ <span id="log-count" class="count">0</span></button><div><span class="console-hint">Сообщения твоей программы</span><button id="clear-log" class="text-button">Очистить</button></div></div>
       <div id="logs" role="log" aria-label="Журнал программы"></div>
     </div>
   </main>
@@ -78,7 +103,24 @@
 </div>
 <footer class="statusbar"><div><span class="status-logo">op</span><span id="status">Запускаем OpenPlay Studio</span></div><div><span id="cursor">Стр 1, стлб 1</span><span id="language">Lua</span><span>UTF-8</span><span class="status-engine"><span class="online-dot"></span>Движок OpenPlay</span></div></footer>
 <dialog id="modal"><form method="dialog"><div class="modal-head"><h2 id="modal-title"></h2><button class="icon-button" value="cancel" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></div><p id="modal-message"></p><input id="modal-input" autocomplete="off" spellcheck="false" hidden><pre id="api-text" hidden></pre><div id="modal-actions"></div></form></dialog>
+<aside id="agent-panel" class="agent-panel" hidden aria-label="Голосовой помощник">
+  <div class="agent-heading"><div><svg><use href="#i-spark"/></svg><strong>Давай сделаем игру</strong><span>ACP</span></div><button id="agent-hide" class="icon-button" aria-label="Скрыть помощника"><svg><use href="#i-close"/></svg></button></div>
+  <div id="agent-messages" role="log"><div class="agent-bubble welcome">Расскажи, какую игру ты придумала. Например: «Сделай игру, где котик ловит звёзды». Можно написать или нажать на микрофон.</div></div>
+  <div id="agent-permissions"></div>
+  <div class="agent-composer"><p id="agent-status" role="status">Готов к идеям · Codex через ACP</p><textarea id="agent-idea" rows="3" maxlength="10000" placeholder="Какую игру сделаем?" aria-label="Идея игры"></textarea><div class="agent-controls"><button id="agent-mic" class="icon-button" title="Рассказать голосом" aria-label="Начать запись голоса"><svg><use href="#i-mic"/></svg></button><label><input id="agent-speak" type="checkbox" checked> Читать ответ</label><button id="agent-cancel" class="quiet" hidden>Остановить</button><button id="agent-send" class="primary"><svg><use href="#i-spark"/></svg>Сделать</button></div><div class="agent-footer"><button id="agent-settings" class="text-button">Настройки и вход</button><button id="agent-undo" class="text-button" disabled>Отменить изменения агента</button></div></div>
+</aside>
+<dialog id="agent-settings-dialog" class="agent-settings-dialog"><form id="agent-settings-form"><div class="modal-head"><h2>Настройки помощника</h2><button id="agent-settings-close" type="button" class="icon-button" aria-label="Закрыть настройки"><svg><use href="#i-close"/></svg></button></div><p class="agent-note">Код пишет Codex через ACP. Используется твой вход в Codex.</p><button id="agent-login" class="quiet" type="button">Войти в Codex</button><pre id="agent-login-status"></pre><label class="agent-field">OpenAI API-ключ для распознавания голоса<input id="agent-key" type="password" placeholder="Вставь ключ здесь" autocomplete="off" spellcheck="false"></label><p id="agent-key-status" class="agent-note"></p><label class="agent-clear-key"><input id="agent-clear-key" type="checkbox"> Удалить сохранённый ключ голоса</label><details class="agent-custom"><summary>Подключить другого ACP-агента</summary><p class="agent-note">Выбери доверенный ACP-сервер (.exe или Node.js-скрипт). Пустое поле включает встроенный адаптер Codex.</p><div><input id="agent-executable" placeholder="Путь к ACP-агенту" aria-label="Путь к ACP-агенту"><button id="agent-pick" class="quiet" type="button">Выбрать</button></div><label class="agent-field">Аргументы, JSON-массив<input id="agent-args" placeholder='["--acp"]' spellcheck="false"></label></details><p class="agent-note">Запись отправляется в OpenAI после остановки микрофона. Распознанный текст можно исправить перед отправкой агенту. Ключ хранится в системном хранилище; API оплачивается отдельно.</p><button type="submit" class="primary">Сохранить настройки</button></form></dialog>
+<dialog id="agent-preview-dialog" class="agent-preview-dialog"><div class="modal-head"><h2>Игра готова — посмотри изменения</h2><button id="agent-preview-close" class="icon-button" aria-label="Закрыть просмотр"><svg><use href="#i-close"/></svg></button></div><p id="agent-check-result" class="agent-note"></p><select id="agent-diff-files" aria-label="Изменённый файл"></select><div id="agent-diff"></div><div class="agent-preview-actions"><button id="agent-discard" class="quiet">Оставить мой код</button><button id="agent-apply" class="primary"><svg><use href="#i-play"/></svg>Применить и играть</button></div></dialog>
+<dialog id="media-import-dialog" class="media-dialog"><div class="modal-head"><h2 id="media-title">Добавить картинку</h2><button id="media-cancel" class="icon-button" aria-label="Отмена">×</button></div><label class="media-field">Название<input id="media-name" maxlength="60"></label><div id="image-import-fields"><canvas id="image-preview" width="320" height="240" aria-label="Предпросмотр картинки"></canvas><div class="media-dimensions"><label>Ширина<input id="image-width" type="number" min="1" max="320" value="64"></label><label>Высота<input id="image-height" type="number" min="1" max="240" value="64"></label><label><input id="image-proportions" type="checkbox" checked> Сохранять пропорции</label></div><label id="image-use-label"><input id="image-use" type="checkbox" checked> Костюм выбранного персонажа</label><p class="agent-note">Прозрачность сохраняется. Размер на консоли совпадает с выбранным.</p></div><div id="sound-import-fields" hidden><audio id="sound-preview" controls></audio><div class="media-dimensions"><label>Начать с секунды<input id="sound-start" type="number" min="0" step="0.1" value="0"></label><label>Длина фрагмента, сек.<input id="sound-length" type="number" min="0.01" max="30" step="0.01" value="10"></label></div><p id="sound-duration" class="agent-note"></p><label id="sound-use-label"><input id="sound-use" type="checkbox" checked> Играть с начала игры по кругу</label><p class="agent-note">Звук работает в симуляторе. У нашей консоли пока не подключён аудиовыход.</p></div><p id="media-import-error" role="alert"></p><div class="media-dialog-actions"><button id="media-add" class="primary">Добавить в проект</button></div></dialog>
+<dialog id="media-preview-dialog" class="media-dialog"><div class="modal-head"><h2 id="media-preview-title"></h2><button id="media-preview-close" class="icon-button" aria-label="Закрыть предпросмотр">×</button></div><canvas id="asset-preview" hidden></canvas><audio id="asset-audio" controls hidden></audio><p id="asset-description" class="agent-note"></p><button id="media-use" class="primary">Использовать</button></dialog>
+<script src="../node_modules/blockly/blockly_compressed.js"></script>
+<script src="../node_modules/blockly/msg/ru.js"></script>
+<script src="../blocks.cjs"></script>
+<script src="../media-codec.cjs"></script>
 <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
 <script src="app.js"></script>
+<script src="blocks-ui.js"></script>
+<script src="media-ui.js"></script>
+<script src="agent-ui.js"></script>
 </body>
 </html>

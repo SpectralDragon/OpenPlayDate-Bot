@@ -64,19 +64,22 @@ async function pack(root) {
   const rawManifest = await fs.readFile(await projectFile(root, 'manifest.json'), 'utf8');
   check(Buffer.byteLength(rawManifest) <= 4096, 'Манифест больше 4096 байт');
   const manifest = validateManifest(JSON.parse(rawManifest));
+  const blocks = await require('./blocks-project.cjs').readBlocks(root, manifest.entry);
+  check(!blocks?.needsBuild,'Открой проект в Studio и сохрани его, чтобы обновить сборку блоков');
   const raw = Buffer.from(JSON.stringify(canonical(manifest)));
   const entries = files.filter(f => f.path !== 'manifest.json').sort((a,b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   check(entries.length >= 1 && entries.length <= 64 && entries.some(f => f.path === manifest.entry), 'Не найден entry или неверное число файлов');
   const header = Buffer.alloc(12); header.write('OPD1'); header.writeUInt32LE(raw.length, 4); header.writeUInt32LE(entries.length, 8);
-  const chunks = [header, raw];
+  const chunks = [header, raw]; let imageVersion=1;
   for (const file of entries) {
     const data = await fs.readFile(await projectFile(root, file.path));
+    if(file.path.endsWith('.opi')&&data.subarray(0,4).toString()==='OPI2')imageVersion=2;
     if (file.path.endsWith('.lua')) check(data.length >= 1 && data.length <= 65536 && data[0] !== 27, `${file.path}: нужен исходный Lua, до 64 КиБ`);
     const name = Buffer.from(file.path); const record = Buffer.alloc(6);
     record.writeUInt16LE(name.length); record.writeUInt32LE(data.length, 2);
     chunks.push(record, name, data);
   }
   const data = Buffer.concat(chunks); check(data.length <= LIMIT, 'Бандл больше 2 МиБ');
-  return { data, manifest, count: entries.length };
+  return { data, manifest, count: entries.length, imageVersion };
 }
 module.exports = { pack, scan, projectFile, validateManifest, safePath };

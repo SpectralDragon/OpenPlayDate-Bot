@@ -109,6 +109,7 @@ async function deploy(address, expectedId, bundle, progress = () => {}) {
   const session = identity(await request(device, '/api/studio'));
   if (session.id !== expectedId) throw new Error('По этому адресу теперь другая консоль. Найди устройства заново.');
   if (!session.storage) throw new Error('На консоли недоступно хранилище');
+  if(bundle.imageVersion===2&&session.imageVersion!==2)throw new Error('Для прозрачных костюмов обнови прошивку консоли: нужна поддержка OPI2.');
   if (typeof session.token !== 'string' || !/^[a-f0-9]{24}$/.test(session.token)) throw new Error('Не удалось получить разрешение на загрузку');
   const filename = bundle.manifest.id + '.opd';
   const boundary = '----OpenPlayStudio' + crypto.randomBytes(12).toString('hex');

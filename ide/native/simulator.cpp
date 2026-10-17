@@ -1,4 +1,5 @@
 #include "lua_app.h"
+#include "lua_audio.h"
 #include "LittleFS.h"
 #include <ArduinoJson.h>
 #include <iostream>
@@ -26,6 +27,10 @@ void packet(char type, const void* bytes, uint32_t size) {
 void event(const char* type, const char* message = "") {
   DynamicJsonDocument doc(2048); doc["type"]=type; doc["message"]=message;
   std::string json; serializeJson(doc,json); packet('J',json.data(),uint32_t(json.size()));
+}
+void openplayaudio::command(const char* action,const char* path,bool loop) {
+  DynamicJsonDocument doc(512);doc["type"]="audio";doc["action"]=action;doc["path"]=path;doc["loop"]=loop;
+  std::string json;serializeJson(doc,json);packet('J',json.data(),uint32_t(json.size()));
 }
 // Enabled only for the desktop target; tests keep their silent Serial double.
 void desktopSerial(const uint8_t* bytes, size_t size) {

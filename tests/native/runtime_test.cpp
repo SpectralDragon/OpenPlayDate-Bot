@@ -1,5 +1,7 @@
 #include "lua_app.h"
 #include "LittleFS.h"
+#include "lua_video.h"
+#include "esp_heap_caps.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -21,6 +23,79 @@ int main(int argc, char** argv) {
   try {
     check(argc == 2, "storage argument"); testStorage = argv[1];
     TFT_eSPI display; LuaApp app(display); Controls controls;
+    auto frame = [&] { testNow += 34; app.update(testNow, controls); check(app.active(), app.error().c_str()); };
+    auto matchesDisplay = [&] {
+      for (int y = 0; y < 240; ++y) for (int x = 0; x < 320; ++x)
+        check(display.pixels[y*320+x] == app.canvas().readPixel(x,y), "LCD matches canvas after partial update");
+    };
+    check(app.start("damage.opd"), app.error().c_str());
+    size_t bytes = display.bytes;
+    frame(); matchesDisplay();
+    check(display.bytes - bytes == luavideo::frameBytes, "first frame replaces the entire menu");
+    bytes = display.bytes;
+    frame(); matchesDisplay();
+    check(display.bytes - bytes == 512, "moving pixel across tile boundaries sends only two tiles");
+    bytes = display.bytes;
+    frame(); matchesDisplay();
+    check(display.bytes == bytes, "identical final frame sends no SPI data after clear/redraw");
+    app.pause(); std::fill(display.pixels.begin(), display.pixels.end(), 0xffff); app.resume();
+    frame(); matchesDisplay();
+    check(display.bytes - bytes == luavideo::frameBytes, "resume replaces the entire pause menu including unchanged pixels");
+    bytes = display.bytes;
+    frame(); matchesDisplay();
+    check(display.bytes - bytes == luavideo::frameBytes, "fragmented damage falls back to full frame");
+    frame(); matchesDisplay(); // Erase the last fragmented image.
+    app.stop();
+
+    check(app.start("images.opd"), app.error().c_str());
+    frame(); matchesDisplay();
+    check(app.canvas().readPixel(0,0) == 0x1234 && app.canvas().readPixel(1,0) == 0xabcd, "negative image clipping uses correct source row and columns");
+    check(app.canvas().readPixel(319,239) == 0xf800, "bottom-right image clipping");
+    check(app.canvas().readPixel(11,10) == 0x07e0 && app.canvas().readPixel(12,10) == 0x001f, "RGB565 green and blue survive bulk blit");
+    size_t reads = testFileReads; bytes = display.bytes;
+    frame(); matchesDisplay();
+    check(testFileReads == reads, "warm image cache performs no filesystem reads");
+    check(display.bytes == bytes, "cached static images perform no LCD transfers");
+    app.stop();
+    check(app.start("image-eviction.opd"), app.error().c_str());
+    frame(); matchesDisplay(); frame(); matchesDisplay();
+    check(app.canvas().readPixel(319,239) == 0xf800, "slot and byte-budget evictions reload the correct image");
+    app.stop();
+    for (const char* name : {"image-header.opd", "image-size.opd", "image-dimensions.opd"}) {
+      check(app.start(name), app.error().c_str()); testNow += 34; app.update(testNow, controls);
+      check(!app.active() && !app.error().isEmpty(), "malformed cached image closes runtime");
+    }
+    testGraphicsAllocationFails = true;
+    check(app.start("images.opd"), app.error().c_str());
+    frame(); matchesDisplay();
+    bytes = display.bytes; reads = testFileReads;
+    frame(); matchesDisplay();
+    check(display.bytes - bytes == luavideo::frameBytes && testFileReads > reads, "allocation failure uses full-frame and streamed-image fallbacks");
+    check(app.canvas().readPixel(0,0) == 0x1234 && app.canvas().readPixel(319,239) == 0xf800, "fallback clipping and colors");
+    app.stop(); testGraphicsAllocationFails = false;
+
+    // Damage lists must cover every changed pixel, including unrelated distant
+    // changes and edge tiles. Reconstruct the LCD across deterministic frames.
+    std::vector<uint16_t> current(320*240), previous(320*240);
+    uint32_t random = 1; size_t partialBytes = 0;
+    for (int step = 0; step < 120; ++step) {
+      std::fill(current.begin(), current.end(), 0);
+      for (int i = 0; i < 20; ++i) {
+        random = random * 1664525u + 1013904223u;
+        current[random % current.size()] = uint16_t(random >> 16);
+      }
+      auto damage = luavideo::findDamage(current.data(), previous.data(), step != 0);
+      for (size_t i = 0; i < damage.count; ++i) {
+        const auto& r = damage.rects[i];
+        check(r.w && r.h && r.x+r.w <= 320 && r.y+r.h <= 240, "damage rectangle stays inside canvas");
+        partialBytes += r.w*r.h*2;
+        for (int y = r.y; y < r.y+r.h; ++y)
+          memcpy(previous.data()+y*320+r.x, current.data()+y*320+r.x, r.w*2);
+      }
+      check(previous == current, "damage reconstruction covers every changed pixel");
+    }
+    std::cout << "VIDEO: 120 sparse frames, full=" << 120*luavideo::frameBytes
+              << " bytes, partial=" << partialBytes << " bytes\n";
     check(app.start("bouncing-ball.opd"), app.error().c_str());
     for (int i = 0; i < 100; ++i) { testNow += 34; app.update(testNow, controls); }
     check(app.active(), app.error().c_str());
@@ -85,7 +160,7 @@ int main(int argc, char** argv) {
       check(app.start("bouncing-ball.opd"), app.error().c_str());
       app.update(testNow, controls); app.stop();
     }
-    std::cout << "PASS: real Lua + production bundle/runtime; lifecycle, input edges, modules, assets, image, GPIO/UART, budgets, malformed bundles, restarts\n";
+    std::cout << "PASS: real Lua + production bundle/runtime; partial LCD updates, image cache, low-memory fallbacks, lifecycle, input edges, modules, assets, GPIO/UART, budgets, malformed bundles, restarts\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << "FAIL: " << error.what() << '\n'; return 1;

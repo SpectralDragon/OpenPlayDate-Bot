@@ -36,6 +36,7 @@ class NetworkService {
   bool pausedForGame_ = false, radioStopped_ = false;
   bool uploadComplete_ = false;
   bool uploadBundle_ = false;
+  bool uploadNes_ = false;
   uint32_t connectAt_ = 0;
   uint32_t discoveryRequests_ = 0, studioRequests_ = 0;
   String apName_, apPassword_, token_, uploadName_, uploadError_;
@@ -52,5 +53,5 @@ class NetworkService {
   void routes();
   bool authorized();
   void page();
-  void uploadChunk(bool bundle = false, bool studio = false);
+  void uploadChunk(bool bundle = false, bool studio = false, bool nes = false);
 };

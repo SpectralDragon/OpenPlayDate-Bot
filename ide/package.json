@@ -10,9 +10,16 @@
     "test": "node --test test/*.test.cjs",
     "test:ui": "node test/ui.cjs",
     "test:packaged": "node test/ui.cjs --packaged",
+    "test:agent-ui": "node test/agent-ui.cjs",
+    "test:blocks-ui": "node test/blocks-ui.cjs",
+    "test:media-ui": "node test/media-ui.cjs",
+    "test:acp": "node test/acp-handshake.cjs",
     "package": "node package.cjs"
   },
   "dependencies": {
+    "@agentclientprotocol/codex-acp": "2.2.2",
+    "@agentclientprotocol/sdk": "1.9.0",
+    "blockly": "13.4.0",
     "monaco-editor": "0.57.0"
   },
   "devDependencies": {
@@ -20,5 +27,7 @@
     "electron": "44.9.0",
     "playwright": "^1.58.2"
   },
-  "overrides": { "dompurify": "3.4.17" }
+  "overrides": {
+    "dompurify": "3.4.17"
+  }
 }

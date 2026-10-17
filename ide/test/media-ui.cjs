@@ -1,0 +1,51 @@
+const {_electron:electron}=require('playwright');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const {encodeWav}=require('../media-codec.cjs');
+(async()=>{
+  const data=await fs.mkdtemp(path.join(os.tmpdir(),'openplay-media-ui-')),root=path.join(data,'game'),png=path.join(data,'Мой рисунок.png'),wav=path.join(data,'Мелодия.wav');
+  const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;const options={env,args:['--user-data-dir='+data]};
+  if(process.argv.includes('--packaged'))options.executablePath=path.join(__dirname,'../dist/OpenPlay-Studio-win32-x64/OpenPlay-Studio.exe');else options.args.unshift(path.join(__dirname,'..'));
+  const app=await electron.launch(options);let page;const artifacts=path.join(__dirname,'artifacts');await fs.mkdir(artifacts,{recursive:true});
+  try{
+    page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.error(m.text());});
+    await page.waitForFunction(()=>document.getElementById('state-label').textContent==='Работает');
+    await app.evaluate(({dialog},filePath)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath});},root);
+    await page.locator('#new-blocks').click();await page.locator('#blocks-editor').waitFor({state:'visible'});await page.waitForFunction(()=>!document.getElementById('run').disabled);
+    await page.evaluate(()=>StudioPreferences.setTheme('dark'));await page.locator('#theme-toggle').click();
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'light');assert.equal(await page.evaluate(()=>blocksUI.workspace.getTheme().getComponentStyle('workspaceBackgroundColour')),'#f5f8fd');
+    assert.equal(await page.locator('#dirty-label').innerText(),'Всё сохранено');
+    const before=(await page.locator('#blockly-workspace').boundingBox()).height;await page.locator('#log-toggle').click();assert.equal(await page.locator('#logs').isVisible(),false);assert.equal(await page.locator('#log-toggle').getAttribute('aria-expanded'),'false');
+    assert.ok((await page.locator('#blockly-workspace').boundingBox()).height>before);
+    await page.keyboard.press('Control+j');assert.equal(await page.locator('#logs').isVisible(),true);await page.locator('#log-toggle').click();
+    const image=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=40;canvas.height=20;const c=canvas.getContext('2d');c.fillStyle='#ff0000';c.fillRect(20,0,20,20);return canvas.toDataURL().split(',')[1];});await fs.writeFile(png,Buffer.from(image,'base64'));
+    const samples=new Float32Array(22050/2);for(let i=0;i<samples.length;i++)samples[i]=Math.sin(i*2*Math.PI*440/22050)*0.05;await fs.writeFile(wav,encodeWav(samples));
+    await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},png);
+    await page.locator('#import-image').click();await page.locator('#media-import-dialog').waitFor({state:'visible'});
+    await page.locator('#image-width').fill('20');await page.locator('#image-width').press('Tab');assert.equal(await page.locator('#image-height').inputValue(),'10');
+    assert.equal(await page.locator('#image-preview').evaluate(c=>c.getContext('2d').getImageData(0,0,1,1).data[3]),0);
+    await page.locator('#media-add').click();await page.locator('#media-import-dialog').waitFor({state:'hidden'});assert.equal(await page.locator('.media-item').count(),1);
+    await page.evaluate(()=>mediaUI.gameAudio.volume=0);
+    await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},wav);
+    await page.locator('#import-sound').click();await page.locator('#media-import-dialog').waitFor({state:'visible'});await page.locator('#media-add').click();await page.locator('#media-import-dialog').waitFor({state:'hidden'});
+    assert.equal(await page.locator('.media-item').count(),2);assert.equal(await page.evaluate(()=>blocksUI.workspace.getBlocksByType('op_sound',false).length),1);
+    await page.locator('#run').click();await page.waitForFunction(()=>document.getElementById('state-label').textContent==='Работает'&&!mediaUI.gameAudio.paused);
+    await page.waitForFunction(()=>document.getElementById('screen').getContext('2d').getImageData(165,150,1,1).data[0]===255);
+    const left=await page.locator('#screen').evaluate(c=>Array.from(c.getContext('2d').getImageData(151,150,1,1).data));assert.notDeepEqual(left,[255,0,0,255]);
+    await page.locator('#pause').click();await page.waitForFunction(()=>mediaUI.gameAudio.paused);await page.locator('#pause').click();await page.waitForFunction(()=>!mediaUI.gameAudio.paused);
+    await page.locator('#stop').click();await page.waitForFunction(()=>mediaUI.gameAudio.paused);
+    const doc=JSON.parse(await fs.readFile(path.join(root,'.openplay-blocks.json'),'utf8'));assert.equal(doc.sprites[0].look,'image');assert.equal(doc.sprites[0].image.width,20);assert.ok((await fs.readFile(path.join(root,doc.sprites[0].image.path))).subarray(0,4).equals(Buffer.from('OPI2')));
+    await page.reload();await page.waitForFunction(()=>document.getElementById('state-label').textContent==='Работает');await page.evaluate(()=>mediaUI.gameAudio.volume=0);
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'light');assert.equal(await page.locator('#logs').isVisible(),false);assert.equal(await page.locator('.media-item').count(),2);assert.equal(await page.evaluate(()=>blocksUI.workspace.getBlocksByType('op_sound',false).length),1);
+    await page.locator('.media-item').first().click();await page.locator('#asset-preview').waitFor({state:'visible'});await page.locator('#media-preview-close').click();
+    await page.locator('.media-item').last().click();await page.locator('#asset-audio').waitFor({state:'visible'});await page.locator('#asset-audio').evaluate(audio=>{audio.volume=0;return audio.play();});await page.waitForFunction(()=>!document.getElementById('asset-audio').paused);await page.locator('#media-preview-close').click();assert.equal(await page.locator('#asset-audio').evaluate(a=>a.paused),true);
+    await page.evaluate(()=>{document.querySelector('.simulator-pane').scrollTop=0;document.querySelector('.sidebar').scrollTop=0;});await page.screenshot({path:path.join(artifacts,'studio-light-media.png')});
+    await page.locator('#theme-toggle').click();assert.equal(await page.evaluate(()=>blocksUI.workspace.getTheme().getComponentStyle('workspaceBackgroundColour')),'#161e29');
+    await page.waitForFunction(()=>getComputedStyle(document.querySelector('.sprite-card.selected')).backgroundColor==='rgb(57, 51, 37)');await page.screenshot({path:path.join(artifacts,'studio-dark-media.png')});
+    await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1080,720));await page.screenshot({path:path.join(artifacts,'media-small.png')});assert.deepEqual(errors,[]);
+    console.log('PASS: persistent light/dark themes including Blockly, collapsible log and Ctrl+J, real PNG and WAV import, transparent costume in native Lua, sound blocks and real audio playback, pause/resume/stop, previews, save and reload');
+  }catch(e){if(page){await page.screenshot({path:path.join(artifacts,'media-failure.png')});console.error(await page.locator('body').innerText());}throw e;}
+  finally{await app.evaluate(({app})=>app.exit());await app.close().catch(()=>{});await fs.rm(data,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exitCode=1;});

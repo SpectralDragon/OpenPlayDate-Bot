@@ -49,6 +49,9 @@ function updateButtons() {
   $('device-scan').disabled = busy || findingDevices;
   $('device-connect').disabled = busy || findingDevices;
   $('device-list').disabled = busy || findingDevices || !consoleDevices.length;
+  if(typeof updateAgentButtons==='function')updateAgentButtons();
+  if(typeof blocksUI!=='undefined')blocksUI.setDisabled(busy);
+  if(typeof mediaUI!=='undefined')mediaUI.setDisabled(busy);
 }
 function setState(state) {
   running = ['running', 'paused'].includes(state); paused = state === 'paused';
@@ -61,7 +64,7 @@ function setState(state) {
 function dirty(entry) { return entry.model.getValue() !== entry.saved; }
 function dirtyEntries() { return [...models.entries()].filter(([, entry]) => dirty(entry)); }
 function refreshDirty() {
-  const count = dirtyEntries().length;
+  const count = dirtyEntries().length + (typeof blocksUI!=='undefined' && blocksUI.dirty() ? 1 : 0);
   $('dirty-label').textContent = count ? `${count} несохранённых` : 'Всё сохранено';
   document.title = `${count ? '● ' : ''}${project?.manifest.name || 'OpenPlay'} — OpenPlay Studio`;
   renderTabs();
@@ -113,8 +116,10 @@ async function openFile(name) {
   if (entry.view) editor.restoreViewState(entry.view);
   $('crumb-file').textContent = name; $('language').textContent = name.endsWith('.lua') ? 'Lua' : name.endsWith('.json') ? 'JSON' : 'Текст';
   renderFiles(); renderTabs(); status(project.root);
+  if(typeof blocksUI!=='undefined')blocksUI.setMode(false);
 }
 async function saveAll() {
+  if(typeof blocksUI!=='undefined')await blocksUI.save();
   for (const [name, entry] of dirtyEntries()) {
     const text = entry.model.getValue(); await api.save(name, text, entry.disk); entry.saved = entry.disk = text;
   }
@@ -135,8 +140,8 @@ function modal({ title, message = '', input, buttons = [{ value: 'ok', label: '�
   });
 }
 async function confirmChanges() {
-  if (!dirtyEntries().length) return true;
-  const result = await modal({ title: 'Сохранить изменения?', message: 'В проекте есть изменённый код.', buttons: [{ value: 'cancel', label: 'Вернуться' }, { value: 'discard', label: 'Не сохранять' }, { value: 'save', label: 'Сохранить', primary: true }] });
+  if (!dirtyEntries().length && !(typeof blocksUI!=='undefined'&&blocksUI.dirty())) return true;
+  const result = await modal({ title: 'Сохранить изменения?', message: 'В проекте есть несохранённые изменения.', buttons: [{ value: 'cancel', label: 'Вернуться' }, { value: 'discard', label: 'Не сохранять' }, { value: 'save', label: 'Сохранить', primary: true }] });
   if (result.action === 'save') { await saveAll(); return true; }
   return result.action === 'discard';
 }
@@ -153,6 +158,7 @@ async function closeTab(name) {
 }
 async function applyProject(value) {
   if (!value) return;
+  if(typeof blocksUI!=='undefined')await blocksUI.load(null);
   releaseInput(); setState('stopped'); editor.setModel(null); active = null;
   for (const entry of models.values()) entry.model.dispose(); models.clear();
   project = value; $('project-name').textContent = value.manifest.name || 'Мой проект'; $('root-name').textContent = value.root.split(/[\\/]/).at(-1);
@@ -160,6 +166,9 @@ async function applyProject(value) {
   renderFiles(); refreshDirty();
   const first = value.files.find(f => f.path === value.manifest.entry) || value.files.find(f => f.text);
   if (first) await openFile(first.path);
+  if(typeof blocksUI!=='undefined')await blocksUI.load(value.blocks);
+  if(typeof mediaUI!=='undefined')await mediaUI.load();
+  updateButtons();
   log(`Открыт проект «${value.manifest.name}»`); status(value.root);
 }
 async function run() {
@@ -316,8 +325,9 @@ screen.addEventListener('blur', () => { releaseInput(); $('focus-hint').textCont
 window.addEventListener('blur', releaseInput);
 document.addEventListener('visibilitychange', () => { if (document.hidden) releaseInput(); });
 document.addEventListener('keydown', event => {
-  if ($('modal').open) return;
+  if (document.querySelector('dialog[open]')) return;
   if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS') { event.preventDefault(); $('save').click(); }
+  else if ((event.ctrlKey || event.metaKey) && event.code === 'KeyJ') { event.preventDefault(); $('log-toggle').click(); }
   else if ((event.ctrlKey || event.metaKey) && event.code === 'KeyO') { event.preventDefault(); $('open').click(); }
   else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyB') { event.preventDefault(); $('export').click(); }
   else if (event.key === 'F5') { event.preventDefault(); (event.shiftKey ? $('stop') : $('run')).click(); }
@@ -326,7 +336,7 @@ document.addEventListener('keydown', event => {
   else if (document.activeElement === screen && keyboard[event.code] && running && !paused) { event.preventDefault(); setKey(keyboard[event.code], true); }
 });
 document.addEventListener('keyup', event => { if (keyboard[event.code] && (mask & bits[keyboard[event.code]])) { event.preventDefault(); setKey(keyboard[event.code], false); } });
-api.onClosing(() => execute(async () => { if (await confirmChanges()) await api.close(); }));
+api.onClosing(() => {if(typeof closeAgentOnExit==='function'&&closeAgentOnExit())return;execute(async () => { if (await confirmChanges()) await api.close(); });});
 bootPicture(); updateButtons();
 $('modal-input').addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); $('modal-actions').querySelector('.primary')?.click(); }
@@ -338,8 +348,10 @@ require(['vs/editor/editor.main'], () => {
     { token: 'string', foreground: 'A6C79A' }, { token: 'number', foreground: 'D5B67C' }, { token: 'identifier', foreground: 'BBC7D8' }
   ], colors: { 'editor.background': '#101318', 'editor.foreground': '#BBC7D8', 'editorLineNumber.foreground': '#354456', 'editorLineNumber.activeForeground': '#9DADBD', 'editor.lineHighlightBackground': '#171E26', 'editor.selectionBackground': '#354354', 'editorCursor.foreground': '#F9C75B', 'editorIndentGuide.background1': '#212C38', 'editorWidget.background': '#1A222D', 'editorWidget.border': '#344151' } });
   $('editor').replaceChildren();
+  monaco.editor.defineTheme('openplay-light',{base:'vs',inherit:true,rules:[{token:'comment',foreground:'688267',fontStyle:'italic'},{token:'keyword',foreground:'7857a1'},{token:'string',foreground:'24724d'},{token:'number',foreground:'975d1b'}],colors:{'editor.background':'#ffffff','editor.foreground':'#29415f','editor.lineHighlightBackground':'#f1f5fb','editorLineNumber.foreground':'#a1b0c4','editorLineNumber.activeForeground':'#4d6688','editor.selectionBackground':'#dce8fc','editorCursor.foreground':'#a16d14','editorWidget.background':'#f5f8fd','editorWidget.border':'#cbd7e7'}});
   editor = monaco.editor.create($('editor'), { theme: 'openplay', model: null, fontFamily: '"Cascadia Code", Consolas, monospace', fontSize: 13, lineHeight: 23, tabSize: 4, insertSpaces: true, minimap: { enabled: false }, automaticLayout: true, scrollBeyondLastLine: false, padding: { top: 22, bottom: 20 }, lineNumbersMinChars: 4, renderLineHighlight: 'all', smoothScrolling: true, wordWrap: 'off', bracketPairColorization: { enabled: true }, fixedOverflowWidgets: true });
   editor.onDidChangeCursorPosition(event => { $('cursor').textContent = `Стр ${event.position.lineNumber}, стлб ${event.position.column}`; });
+  StudioPreferences.applyEditor();
   const signatures = {
     'graphics.clear': 'clear(${1:0})', 'graphics.color': 'color(${1:65535})', 'graphics.rgb': 'rgb(${1:255}, ${2:211}, ${3:77})',
     'graphics.pixel': 'pixel(${1:x}, ${2:y})', 'graphics.line': 'line(${1:x1}, ${2:y1}, ${3:x2}, ${4:y2})',

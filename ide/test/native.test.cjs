@@ -82,3 +82,19 @@ test('Syntax errors and infinite loops produce readable errors and terminate', a
     } finally { await s.close(); }
   }
 });
+test('Transparent imported images preserve underlying pixels on cache hits and clipping',async()=>{
+  const {encodeImage}=require('../media-codec.cjs');
+  const rgba=new Uint8Array([255,0,0,255,0,0,0,0,255,0,0,255,0,0,0,0,255,0,0,255,0,0,0,0]);
+  const temp=await fixture(`return {draw=function() local g=opd.graphics g.clear(31) g.image('mask.opi',10,10) g.image('mask.opi',20,20) g.image('mask.opi',-1,-1) end}`,{}, {'mask.opi':encodeImage(rgba,3,2)}),s=session(temp);
+  try{await s.next('ready');s.send('frame 34 0');const frame=(await s.next('frame')).bytes,pixel=(x,y)=>frame.readUInt16LE((y*320+x)*2);
+    assert.equal(pixel(10,10),0xf800);assert.equal(pixel(11,10),31);assert.equal(pixel(10,11),31);assert.equal(pixel(11,11),0xf800);assert.equal(pixel(21,21),0xf800);assert.equal(pixel(0,0),0xf800);assert.equal(pixel(1,0),31);
+  }finally{await s.close();}
+});
+test('Native audio protocol follows Lua playback and pause/resume/stop lifecycle',async()=>{
+  const wav=require('../media-codec.cjs').encodeWav(new Float32Array(2205));
+  const temp=await fixture(`return {init=function() assert(opd.audio.available) opd.audio.play('tone.wav',true) end}`,{}, {'tone.wav':wav}),s=session(temp);
+  try{
+    let event=await s.next('audio');while(event.action!=='play')event=await s.next('audio');assert.equal(event.path,'tone.wav');assert.equal(event.loop,true);await s.next('ready');
+    s.send('pause');assert.equal((await s.next('audio')).action,'pause');await s.next('paused');s.send('resume');assert.equal((await s.next('audio')).action,'resume');await s.next('resumed');s.send('stop');assert.equal((await s.next('audio')).action,'stop');
+  }finally{await s.close();}
+});

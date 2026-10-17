@@ -1,0 +1,5 @@
+Source: https://github.com/ducalex/retro-go
+Commit: 4ced120669750ca7228fd0414211430c1d923166
+Path: retro-core/components/nofrendo/
+License: See COPYING (upstream GPLv2) and per-file GNU Library GPL v2 notices.
+Local changes: see PATCHES.md.

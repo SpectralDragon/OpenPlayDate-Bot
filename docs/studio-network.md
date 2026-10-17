@@ -2,10 +2,10 @@
 
 Firmware starts HTTP/UDP services when connected to the saved Wi-Fi network,
 or while its explicit setup AP is open. Disabling Wi-Fi/disconnecting stops
-services. Game Boy stops the radio; Lua programs leave the network available.
+services. Game Boy and NES stop the radio; Lua programs leave the network available.
 The AP no longer owns the lifetime of the HTTP server on the station interface.
 Wi-Fi modem sleep is disabled while the network is enabled, so ARP, discovery
-and HTTP remain responsive; Game Boy still explicitly stops the radio.
+and HTTP remain responsive; Game Boy and NES explicitly stop the radio.
 
 ## Discovery
 
@@ -37,7 +37,7 @@ URLs, paths and redirects are not accepted by the desktop client.
 
 Before accepting the upload, the shell shuts down an existing Lua application
 and releases GPIO/UART, closing the bundle before its file can be replaced.
-Game Boy prevents preparation. After successful commit, the shell starts the
+An active Game Boy or NES cartridge prevents preparation. After successful commit, the shell starts the
 uploaded Lua application. `200` means the main chunk and `init` succeeded:
 
 ```json

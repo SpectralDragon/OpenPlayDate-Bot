@@ -3,6 +3,7 @@
 #include <fstream>
 #include <filesystem>
 #include <memory>
+inline size_t testFileReads = 0;
 class File {
   std::shared_ptr<std::ifstream> stream_;
   std::filesystem::path path_;
@@ -17,7 +18,7 @@ class File {
   size_t size() { return std::filesystem::file_size(path_); }
   size_t position() { return size_t(stream_->tellg()); }
   bool seek(size_t offset) { stream_->clear(); stream_->seekg(offset); return bool(*stream_); }
-  size_t read(uint8_t* data, size_t size) { stream_->read(reinterpret_cast<char*>(data), size); return size_t(stream_->gcount()); }
+  size_t read(uint8_t* data, size_t size) { ++testFileReads; stream_->read(reinterpret_cast<char*>(data), size); return size_t(stream_->gcount()); }
   size_t readBytes(char* data, size_t size) { return read(reinterpret_cast<uint8_t*>(data), size); }
   void close() { stream_.reset(); iterator_.reset(); }
   String name() const { return path_.filename().string(); }
