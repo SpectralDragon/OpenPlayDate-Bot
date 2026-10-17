@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1430" viewBox="0 0 1900 1430" role="img" aria-label="Схема подключения AI-S3, экрана SPI, джойстика и двух кнопок">
+<rect x="0" y="0" width="1900" height="1430" rx="0" fill="#f7f8fb" stroke="#f7f8fb" stroke-width="2"/>
+<text x="60" y="68" font-family="Segoe UI,Arial,sans-serif" font-size="43" font-weight="600" fill="#202733" text-anchor="start">Первый пульт робота</text>
+<text x="60" y="110" font-family="Segoe UI,Arial,sans-serif" font-size="26" font-weight="400" fill="#566174" text-anchor="start">AI-S3 / ESP32-S3-WROOM-1 N16R8 • экран SPI 240×320 • джойстик • две кнопки</text>
+<text x="60" y="151" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#566174" text-anchor="start">Контакты расположены условно. Подключай по надписям на платах, а не по месту на рисунке.</text>
+<rect x="700" y="190" width="470" height="935" rx="22" fill="#eee8f8" stroke="#a78cc5" stroke-width="2"/>
+<rect x="821" y="219" width="228" height="55" rx="5" fill="#444353" stroke="#444353" stroke-width="2"/>
+<text x="935" y="255" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="500" fill="#ffffff" text-anchor="middle">АНТЕННА</text>
+<text x="935" y="310" font-family="Segoe UI,Arial,sans-serif" font-size="37" font-weight="600" fill="#202733" text-anchor="middle">AI-S3</text>
+<text x="935" y="346" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#566174" text-anchor="middle">ESP32-S3</text>
+<text x="935" y="378" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="400" fill="#566174" text-anchor="middle">N16R8</text>
+<rect x="60" y="205" width="365" height="410" rx="14" fill="#ffffff" stroke="#d6dce5" stroke-width="2"/>
+<text x="85" y="247" font-family="Segoe UI,Arial,sans-serif" font-size="28" font-weight="600" fill="#202733" text-anchor="start">ДЖОЙСТИК</text>
+<circle cx="150" cy="379" r="62" fill="#303744"/><circle cx="140" cy="365" r="33" fill="#454f60"/>
+<text x="397" y="287" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GND</text>
+<path d="M425 300 H700" fill="none" stroke="#252a32" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="300" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<circle cx="700" cy="300" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<text x="719" y="308" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GND</text>
+<text x="397" y="347" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">+5V</text>
+<path d="M425 360 H700" fill="none" stroke="#d93b53" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="360" r="7" fill="white" stroke="#d93b53" stroke-width="4"/>
+<circle cx="700" cy="360" r="7" fill="white" stroke="#d93b53" stroke-width="4"/>
+<text x="719" y="368" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">3V3</text>
+<text x="397" y="407" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">VRx</text>
+<path d="M425 420 H700" fill="none" stroke="#16845c" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="420" r="7" fill="white" stroke="#16845c" stroke-width="4"/>
+<circle cx="700" cy="420" r="7" fill="white" stroke="#16845c" stroke-width="4"/>
+<text x="719" y="428" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GPIO 4</text>
+<text x="397" y="467" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">VRy</text>
+<path d="M425 480 H700" fill="none" stroke="#2374cc" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="480" r="7" fill="white" stroke="#2374cc" stroke-width="4"/>
+<circle cx="700" cy="480" r="7" fill="white" stroke="#2374cc" stroke-width="4"/>
+<text x="719" y="488" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GPIO 5</text>
+<text x="397" y="527" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">SW</text>
+<path d="M425 540 H700" fill="none" stroke="#cf781a" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="540" r="7" fill="white" stroke="#cf781a" stroke-width="4"/>
+<circle cx="700" cy="540" r="7" fill="white" stroke="#cf781a" stroke-width="4"/>
+<text x="719" y="548" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GPIO 6</text>
+<text x="85" y="585" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="600" fill="#d93b53" text-anchor="start">Контакт «+5V» питаем от 3V3!</text>
+<rect x="60" y="640" width="365" height="185" rx="14" fill="#ffffff" stroke="#d6dce5" stroke-width="2"/>
+<text x="85" y="682" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="600" fill="#202733" text-anchor="start">КНОПКА A</text>
+<path d="M425 725 H310 V740" fill="none" stroke="#8050bb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M425 785 H310 V770" fill="none" stroke="#252a32" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="310" cy="740" r="5" fill="white" stroke="#8050bb" stroke-width="4"/>
+<circle cx="310" cy="770" r="5" fill="white" stroke="#252a32" stroke-width="4"/>
+<path d="M310 740 L285 765" fill="none" stroke="#202733" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="85" y="740" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="start">Нажатие</text>
+<text x="85" y="770" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="start">замыкает</text>
+<path d="M425 725 H700" fill="none" stroke="#8050bb" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="725" r="7" fill="white" stroke="#8050bb" stroke-width="4"/>
+<circle cx="700" cy="725" r="7" fill="white" stroke="#8050bb" stroke-width="4"/>
+<path d="M425 785 H700" fill="none" stroke="#252a32" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="785" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<circle cx="700" cy="785" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<text x="719" y="733" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GPIO 7</text>
+<text x="719" y="793" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GND</text>
+<rect x="60" y="865" width="365" height="185" rx="14" fill="#ffffff" stroke="#d6dce5" stroke-width="2"/>
+<text x="85" y="907" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="600" fill="#202733" text-anchor="start">КНОПКА B</text>
+<path d="M425 950 H310 V965" fill="none" stroke="#b34891" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M425 1010 H310 V995" fill="none" stroke="#252a32" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="310" cy="965" r="5" fill="white" stroke="#b34891" stroke-width="4"/>
+<circle cx="310" cy="995" r="5" fill="white" stroke="#252a32" stroke-width="4"/>
+<path d="M310 965 L285 990" fill="none" stroke="#202733" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="85" y="965" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="start">Нажатие</text>
+<text x="85" y="995" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="start">замыкает</text>
+<path d="M425 950 H700" fill="none" stroke="#b34891" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="950" r="7" fill="white" stroke="#b34891" stroke-width="4"/>
+<circle cx="700" cy="950" r="7" fill="white" stroke="#b34891" stroke-width="4"/>
+<path d="M425 1010 H700" fill="none" stroke="#252a32" stroke-width="5" stroke-linecap="round"/>
+<circle cx="425" cy="1010" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<circle cx="700" cy="1010" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<text x="719" y="958" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GPIO 15</text>
+<text x="719" y="1018" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GND</text>
+<text x="935" y="1051" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="500" fill="#202733" text-anchor="middle">6, 7, 15: INPUT_PULLUP</text>
+<text x="935" y="1085" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="middle">Нажато = 0</text>
+<rect x="1430" y="205" width="410" height="640" rx="14" fill="#fff4f1" stroke="#e4c0b7" stroke-width="2"/>
+<text x="1455" y="247" font-family="Segoe UI,Arial,sans-serif" font-size="28" font-weight="600" fill="#202733" text-anchor="start">ЭКРАН SPI</text>
+<text x="1151" y="287" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">5Vin*</text>
+<path d="M1170 300 H1430" fill="none" stroke="#a12436" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="300" r="7" fill="white" stroke="#a12436" stroke-width="4"/>
+<circle cx="1430" cy="300" r="7" fill="white" stroke="#a12436" stroke-width="4"/>
+<text x="1452" y="308" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">VCC</text>
+<text x="1151" y="347" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GND</text>
+<path d="M1170 360 H1430" fill="none" stroke="#252a32" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="360" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<circle cx="1430" cy="360" r="7" fill="white" stroke="#252a32" stroke-width="4"/>
+<text x="1452" y="368" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">GND</text>
+<text x="1151" y="407" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GPIO 10</text>
+<path d="M1170 420 H1430" fill="none" stroke="#ce7617" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="420" r="7" fill="white" stroke="#ce7617" stroke-width="4"/>
+<circle cx="1430" cy="420" r="7" fill="white" stroke="#ce7617" stroke-width="4"/>
+<text x="1452" y="428" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">CS</text>
+<text x="1151" y="467" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GPIO 14</text>
+<path d="M1170 480 H1430" fill="none" stroke="#856043" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="480" r="7" fill="white" stroke="#856043" stroke-width="4"/>
+<circle cx="1430" cy="480" r="7" fill="white" stroke="#856043" stroke-width="4"/>
+<text x="1452" y="488" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">RESET</text>
+<text x="1151" y="527" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GPIO 9</text>
+<path d="M1170 540 H1430" fill="none" stroke="#8253bd" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="540" r="7" fill="white" stroke="#8253bd" stroke-width="4"/>
+<circle cx="1430" cy="540" r="7" fill="white" stroke="#8253bd" stroke-width="4"/>
+<text x="1452" y="548" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">DC</text>
+<text x="1151" y="587" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GPIO 11</text>
+<path d="M1170 600 H1430" fill="none" stroke="#128568" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="600" r="7" fill="white" stroke="#128568" stroke-width="4"/>
+<circle cx="1430" cy="600" r="7" fill="white" stroke="#128568" stroke-width="4"/>
+<text x="1452" y="608" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">SDI (MOSI)</text>
+<text x="1151" y="647" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">GPIO 12</text>
+<path d="M1170 660 H1430" fill="none" stroke="#2878c7" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="660" r="7" fill="white" stroke="#2878c7" stroke-width="4"/>
+<circle cx="1430" cy="660" r="7" fill="white" stroke="#2878c7" stroke-width="4"/>
+<text x="1452" y="668" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">SCK</text>
+<text x="1151" y="707" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="end">3V3</text>
+<path d="M1170 720 H1430" fill="none" stroke="#d93b53" stroke-width="5" stroke-linecap="round"/>
+<circle cx="1170" cy="720" r="7" fill="white" stroke="#d93b53" stroke-width="4"/>
+<circle cx="1430" cy="720" r="7" fill="white" stroke="#d93b53" stroke-width="4"/>
+<text x="1452" y="728" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="500" fill="#202733" text-anchor="start">LED</text>
+<rect x="1673" y="305" width="137" height="227" rx="5" fill="#263944" stroke="#263944" stroke-width="2"/>
+<ellipse cx="1710" cy="405" rx="13" ry="26" fill="#cbece8"/><ellipse cx="1770" cy="405" rx="13" ry="26" fill="#cbece8"/>
+<text x="1742" y="478" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="400" fill="#ffffff" text-anchor="middle">240×320</text>
+<text x="1455" y="778" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="600" fill="#a12436" text-anchor="start">J1 оставить разомкнутой.</text>
+<text x="1455" y="814" font-family="Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#566174" text-anchor="start">LED — постоянная подсветка.</text>
+<text x="1230" y="906" font-family="Segoe UI,Arial,sans-serif" font-size="24" font-weight="600" fill="#202733" text-anchor="start">ПОКА ОСТАВИТЬ СВОБОДНЫМИ</text>
+<text x="1230" y="948" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#566174" text-anchor="start">Экран: SDO (MISO), T_CLK, T_CS,</text>
+<text x="1230" y="981" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#566174" text-anchor="start">T_DIN, T_DO, T_IRQ и все SD_*.</text>
+<text x="1230" y="1035" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="400" fill="#566174" text-anchor="start">На фото U1 для тача не установлена.</text>
+<text x="1230" y="1073" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="400" fill="#566174" text-anchor="start">Профиль ST7789, 240×320, BGR, инверсия выкл.</text>
+<text x="1230" y="1107" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="600" fill="#a12436" text-anchor="start">*5Vin: выход от USB требует проверки IN-OUT.</text>
+<text x="1230" y="1135" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="600" fill="#a12436" text-anchor="start">До подключения VCC измерь около 5 В! См. README.</text>
+<rect x="60" y="1164" width="1780" height="210" rx="14" fill="#ffffff" stroke="#d6dce5" stroke-width="2"/>
+<text x="88" y="1205" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="600" fill="#202733" text-anchor="start">ПЕРЕД ПОДКЛЮЧЕНИЕМ</text>
+<text x="88" y="1246" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#202733" text-anchor="start">1. Питание всей сборки — одним USB-кабелем через AI-S3. Переставляй провода при отключённом USB.</text>
+<text x="88" y="1284" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#202733" text-anchor="start">2. Все GND соединены. Повторяющиеся GND и 3V3 на рисунке — общие шины макетки.</text>
+<text x="88" y="1322" font-family="Segoe UI,Arial,sans-serif" font-size="23" font-weight="400" fill="#202733" text-anchor="start">3. У каждой кнопки выбери выводы из разных пар: они соединяются только при нажатии. Проверь прозвонкой.</text>
+<text x="60" y="1410" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="400" fill="#566174" text-anchor="start">GPIO 12 означает контакт с надписью «12». GPIO35–37 заняты PSRAM. На сигнальные выводы ESP32 не подавать 5 В.</text>
+</svg>

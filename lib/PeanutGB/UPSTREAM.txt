@@ -1,0 +1,3 @@
+https://github.com/deltabeard/Peanut-GB
+Commit: d0bcca771c83a2638c93a9ae61f3d51f226dc905
+License: MIT (full notice in peanut_gb.h)
